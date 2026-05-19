@@ -1,0 +1,196 @@
+"""E2E smoke test — free-chat session after two-stage analysis.
+
+Task 19.4
+"""
+from __future__ import annotations
+
+import json
+from unittest.mock import MagicMock
+
+import pytest
+
+from pa_agent.data.base import KlineBar
+from pa_agent.data.kline_buffer import KlineBuffer
+from pa_agent.app_context import AppContext
+from pa_agent.orchestrator.exception_counter import ExceptionCounter
+from pa_agent.ai.json_validator import JsonValidator
+from pa_agent.ai.router import route_strategy_files
+
+# ── Shared payloads ───────────────────────────────────────────────────────────
+
+VALID_STAGE1 = {
+    "cycle_position": "normal_channel",
+    "direction": "bullish",
+    "diagnosis_confidence": "high",
+    "market_phase": "stable",
+    "detected_patterns": [],
+    "key_signals": ["signal1"],
+    "htf_context": "bullish trend",
+    "entry_setup": "buy on pullback",
+    "strategy_files_needed": ["上涨通道分析识别.txt"],
+}
+
+VALID_STAGE2_ORDER = {
+    "decision": {
+        "order_direction": "做多",
+        "order_type": "限价单",
+        "entry_price": 2000.0,
+        "take_profit_price": 2050.0,
+        "stop_loss_price": 1980.0,
+        "reasoning": "Strong bullish signal",
+        "confidence": "high",
+        "key_factors": ["factor1"],
+        "watch_points": ["watch1"],
+        "risk_assessment": "low risk",
+        "invalidation_condition": "break below 1980",
+    },
+    "diagnosis_summary": {
+        "cycle_position": "normal_channel",
+        "direction": "bullish",
+        "key_signals": ["signal1"],
+    },
+}
+
+CHAT_REPLY_CONTENT = "This is a follow-up AI response."
+
+
+def _make_reply(content_dict: dict) -> MagicMock:
+    reply = MagicMock()
+    reply.content = json.dumps(content_dict)
+    reply.raw = {"content": reply.content}
+    reply.usage = MagicMock()
+    reply.usage.prompt_tokens = 100
+    reply.usage.completion_tokens = 50
+    reply.usage.cached_prompt_tokens = 0
+    reply.usage.total_tokens = 150
+    return reply
+
+
+def _make_chat_reply(content: str) -> MagicMock:
+    """Build a mock AIReply for a free-chat turn."""
+    reply = MagicMock()
+    reply.content = content
+    reply.reasoning_content = ""
+    reply.raw = {"content": content}
+    reply.usage = MagicMock()
+    reply.usage.prompt_tokens = 80
+    reply.usage.completion_tokens = 30
+    reply.usage.cached_prompt_tokens = 0
+    reply.usage.total_tokens = 110
+    return reply
+
+
+def _make_ctx(tmp_path):
+    """Build a minimal AppContext for the free-chat smoke test."""
+    buffer = KlineBuffer(capacity=500)
+    for i in range(10, 0, -1):
+        bar = KlineBar(
+            seq=i,
+            ts_open=1_700_000_000_000 - i * 3_600_000,
+            open=2000.0,
+            high=2010.0,
+            low=1990.0,
+            close=2005.0,
+            volume=100.0,
+            closed=(i > 1),
+        )
+        if i == 1:
+            buffer.update_forming(bar)
+        else:
+            buffer.append(bar)
+
+    mock_client = MagicMock()
+    mock_client.chat.side_effect = [
+        _make_reply(VALID_STAGE1),
+        _make_reply(VALID_STAGE2_ORDER),
+        _make_chat_reply(CHAT_REPLY_CONTENT),
+    ]
+
+    mock_assembler = MagicMock()
+    mock_assembler.build_stage1.return_value = [{"role": "system", "content": "s1"}]
+    mock_assembler.build_stage2.return_value = [{"role": "system", "content": "s2"}]
+
+    exc_counter = ExceptionCounter(state_path=tmp_path / "exc.json")
+    exc_counter.load()
+
+    pending_writer = MagicMock()
+
+    ctx = AppContext()
+    ctx.buffer = buffer
+    ctx.client = mock_client
+    ctx.assembler = mock_assembler
+    ctx.router = route_strategy_files
+    ctx.validator = JsonValidator()
+    ctx.exc_counter = exc_counter
+    ctx.pending_writer = pending_writer
+    ctx.exp_reader = MagicMock()
+    ctx.exp_reader.read_top5.return_value = []
+
+    return ctx, pending_writer, exc_counter
+
+
+@pytest.mark.e2e
+def test_free_chat_after_analysis(qtbot, tmp_path):
+    """After two-stage analysis, a FreeChatSession can send one turn."""
+    from pa_agent.gui.main_window import MainWindow
+    from pa_agent.orchestrator.free_chat import FreeChatSession
+    from pa_agent.ai.session_ledger import SessionTokenLedger
+    from pa_agent.config.settings import PricingTable
+    from pa_agent.util.threading import CancelToken
+
+    ctx, pending_writer, exc_counter = _make_ctx(tmp_path)
+
+    window = MainWindow(ctx)
+    qtbot.addWidget(window)
+    window.show()
+
+    window._bar_count_spin.setValue(5)
+
+    # Run two-stage analysis
+    window._on_submit_analysis()
+
+    # Poll until the analysis is no longer in progress
+    qtbot.waitUntil(
+        lambda: not window._analysis_in_progress,
+        timeout=10_000,
+    )
+
+    # Retrieve the completed record from the save_full call
+    assert pending_writer.save_full.called, "save_full should have been called"
+    completed_record = pending_writer.save_full.call_args[0][0]
+
+    # Build a SessionTokenLedger for the free-chat session
+    pricing = PricingTable()
+    ledger = SessionTokenLedger(pricing=pricing)
+
+    # Create a FreeChatSession wired to the window's client
+    session = FreeChatSession(
+        base_record=completed_record,
+        client=ctx.client,
+        assembler=ctx.assembler,
+        pending_writer=ctx.pending_writer,
+        ledger=ledger,
+    )
+
+    # Wire the session to the window
+    window._free_chat_session = session
+
+    # Send one message via the session directly (simulating what the UI does)
+    cancel_token = CancelToken()
+    reply = session.send("What do you think about the entry?", cancel_token)
+
+    # FreeChatSession should have completed one turn
+    assert session._turn == 1, f"Expected 1 turn, got {session._turn}"
+    assert len(session.history_full) == 2  # user + assistant
+
+    # pending_writer.append_followup should have been called
+    pending_writer.append_followup.assert_called_once()
+    call_args = pending_writer.append_followup.call_args
+    record_id_arg = call_args[0][0]
+    followup_turn_arg = call_args[0][1]
+    assert followup_turn_arg.turn == 1
+    assert followup_turn_arg.cancelled is False
+
+    # Ledger should have been updated
+    assert ledger.total_input > 0, "Ledger should have accumulated input tokens"
+    assert ledger.total_output > 0, "Ledger should have accumulated output tokens"

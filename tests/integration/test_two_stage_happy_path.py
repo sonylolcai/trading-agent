@@ -1,0 +1,64 @@
+"""Integration test: happy path — both stages succeed.
+
+Task 11.4
+"""
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+from pa_agent.ai.json_validator import JsonValidator
+from pa_agent.ai.router import route_strategy_files
+from pa_agent.orchestrator.two_stage import TwoStageOrchestrator
+from pa_agent.util.threading import CancelToken, OrchestratorEvent
+
+from .conftest import VALID_STAGE1, VALID_STAGE2, make_reply
+
+
+def test_happy_path(frame, exc_counter, pending_writer, assembler, exp_reader):
+    """Both stages return valid JSON → full record saved, counter stays at 0."""
+    client = MagicMock()
+    client.chat.side_effect = [
+        make_reply(VALID_STAGE1),
+        make_reply(VALID_STAGE2),
+    ]
+
+    validator = JsonValidator()
+    orchestrator = TwoStageOrchestrator(
+        client=client,
+        assembler=assembler,
+        router=route_strategy_files,
+        validator=validator,
+        exc_counter=exc_counter,
+        pending_writer=pending_writer,
+        exp_reader=exp_reader,
+    )
+
+    events: list[OrchestratorEvent] = []
+    cancel_token = CancelToken()
+
+    record = orchestrator.submit(
+        frame=frame,
+        htf_text="bullish HTF",
+        cancel_token=cancel_token,
+        on_event=events.append,
+    )
+
+    # Event sequence
+    assert events == [
+        OrchestratorEvent.Stage1Started,
+        OrchestratorEvent.Stage1Done,
+        OrchestratorEvent.Stage2Started,
+        OrchestratorEvent.Stage2Done,
+        OrchestratorEvent.RecordSaved,
+    ]
+
+    # Exception counter reset to 0 after success
+    assert exc_counter.consecutive_count == 0
+
+    # Record has both stages populated
+    assert record.stage1_diagnosis is not None
+    assert record.stage2_decision is not None
+
+    # save_full was called (not save_partial)
+    pending_writer.save_full.assert_called_once_with(record)
+    pending_writer.save_partial.assert_not_called()

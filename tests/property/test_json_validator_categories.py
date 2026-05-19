@@ -1,0 +1,131 @@
+"""Property-based tests for JsonValidator category classification (task 8.4 / PR7)."""
+from __future__ import annotations
+
+import json
+import pytest
+from pa_agent.ai.json_validator import JsonValidator, Ok, ValidationError
+
+validator = JsonValidator()
+
+# ── Minimal valid Stage 1 object ──────────────────────────────────────────────
+
+def _valid_stage1() -> dict:
+    return {
+        "cycle_position": "normal_channel",
+        "direction": "bullish",
+        "diagnosis_confidence": "high",
+        "market_phase": "stable",
+        "detected_patterns": [],
+        "key_signals": ["HH+HL structure"],
+        "htf_context": "1h bullish",
+        "entry_setup": "pullback to EMA20",
+        "strategy_files_needed": ["上涨通道分析识别.txt"],
+        "risk_warning": "watch for reversal",
+    }
+
+
+def _valid_stage2() -> dict:
+    return {
+        "decision": {
+            "order_direction": None,
+            "order_type": "不下单",
+            "entry_price": None,
+            "take_profit_price": None,
+            "stop_loss_price": None,
+            "reasoning": "Market unclear",
+            "confidence": "low",
+            "key_factors": ["unclear structure"],
+            "watch_points": ["watch EMA20"],
+            "risk_assessment": "high risk",
+            "invalidation_condition": "price breaks above 2700",
+        },
+        "diagnosis_summary": {
+            "cycle_position": "normal_channel",
+            "direction": "bullish",
+            "key_signals": ["HH+HL"],
+        },
+    }
+
+
+# ── Category tests ────────────────────────────────────────────────────────────
+
+def test_valid_stage1_returns_ok():
+    """Valid Stage 1 JSON returns Ok.
+
+    **Validates: Requirements PR7.1**
+    """
+    result = validator.validate("stage1", json.dumps(_valid_stage1()))
+    assert isinstance(result, Ok), f"Expected Ok, got {result}"
+
+
+def test_valid_stage2_no_order_returns_ok():
+    """Valid Stage 2 JSON with 不下单 returns Ok.
+
+    **Validates: Requirements PR7.1**
+    """
+    result = validator.validate("stage2", json.dumps(_valid_stage2()))
+    assert isinstance(result, Ok), f"Expected Ok, got {result}"
+
+
+def test_syntax_error_is_category_a():
+    """Malformed JSON is classified as category a.
+
+    **Validates: Requirements PR7.1**
+    """
+    result = validator.validate("stage1", "{not valid json")
+    assert isinstance(result, ValidationError)
+    assert result.category == "a"
+
+
+def test_missing_required_field_is_category_b():
+    """JSON missing a required field is classified as category b.
+
+    **Validates: Requirements PR7.1**
+    """
+    obj = _valid_stage1()
+    del obj["cycle_position"]
+    result = validator.validate("stage1", json.dumps(obj))
+    assert isinstance(result, ValidationError)
+    assert result.category == "b"
+    assert "cycle_position" in result.missing_fields
+
+
+def test_invalid_enum_value_is_category_c():
+    """JSON with an invalid enum value is classified as category c.
+
+    **Validates: Requirements PR7.1**
+    """
+    obj = _valid_stage1()
+    obj["direction"] = "sideways"  # not in enum
+    result = validator.validate("stage1", json.dumps(obj))
+    assert isinstance(result, ValidationError)
+    assert result.category == "c"
+
+
+def test_plain_text_is_category_d():
+    """Plain text (no JSON) is classified as category d.
+
+    **Validates: Requirements PR7.1**
+    """
+    result = validator.validate("stage1", "I cannot provide a JSON response at this time.")
+    assert isinstance(result, ValidationError)
+    assert result.category == "d"
+
+
+def test_no_order_with_non_null_price_is_category_c():
+    """不下单 with non-null entry_price is classified as category c.
+
+    **Validates: Requirements PR7.1 / PR3.1**
+    """
+    obj = _valid_stage2()
+    obj["decision"]["entry_price"] = 2650.0  # must be null for 不下单
+    result = validator.validate("stage2", json.dumps(obj))
+    assert isinstance(result, ValidationError)
+    assert result.category == "c"
+
+
+def test_markdown_fenced_json_is_accepted():
+    """JSON wrapped in markdown fences is accepted."""
+    raw = f"```json\n{json.dumps(_valid_stage1())}\n```"
+    result = validator.validate("stage1", raw)
+    assert isinstance(result, Ok)

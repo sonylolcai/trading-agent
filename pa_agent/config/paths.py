@@ -1,0 +1,27 @@
+"""Centralised path constants for PA Agent.
+
+All runtime directories are rooted at PROJECT_ROOT.
+Import this module everywhere instead of hard-coding paths.
+"""
+from __future__ import annotations
+from pathlib import Path
+
+# ── Root ──────────────────────────────────────────────────────────────────────
+PROJECT_ROOT: Path = Path(r"D:\cl\PA_Agent")
+
+# ── Prompt engineering assets (read-only at runtime) ─────────────────────────
+PROMPT_DIR: Path = PROJECT_ROOT / "prompt_engineering"
+
+# Alias kept for backward compat with design doc
+PA_AGENT_DIR: Path = PROJECT_ROOT
+
+# ── Runtime write directories ─────────────────────────────────────────────────
+RECORDS_PENDING_DIR: Path = PROJECT_ROOT / "records" / "pending"
+EXPERIENCE_DIR: Path = PROJECT_ROOT / "experience"
+CONFIG_DIR: Path = PROJECT_ROOT / "config"
+LOGS_DIR: Path = PROJECT_ROOT / "logs"
+
+# ── Individual file paths ─────────────────────────────────────────────────────
+SETTINGS_JSON_PATH: Path = CONFIG_DIR / "settings.json"
+EXCEPTION_STATE_JSON_PATH: Path = CONFIG_DIR / "exception_state.json"
+LOG_FILE_PATH: Path = LOGS_DIR / "pa_agent.log"

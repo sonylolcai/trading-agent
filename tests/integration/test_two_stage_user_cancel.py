@@ -1,0 +1,65 @@
+"""Integration test: cancel_token set before stage 2 starts.
+
+Task 11.10
+"""
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+from pa_agent.ai.json_validator import JsonValidator
+from pa_agent.ai.router import route_strategy_files
+from pa_agent.orchestrator.two_stage import TwoStageOrchestrator
+from pa_agent.util.threading import CancelToken, OrchestratorEvent
+
+from .conftest import VALID_STAGE1, make_reply
+
+
+def test_cancel_before_stage2(frame, exc_counter, pending_writer, assembler, exp_reader):
+    """cancel_token set after stage1 succeeds → Cancelled event, no Stage2, count unchanged."""
+    cancel_token = CancelToken()
+
+    # After stage1 chat returns, set the cancel token so the pre-stage2 check fires
+    stage1_reply = make_reply(VALID_STAGE1)
+
+    def chat_side_effect(messages, **kwargs):
+        # Set cancel after the first (stage1) call returns
+        cancel_token.set()
+        return stage1_reply
+
+    client = MagicMock()
+    client.chat.side_effect = chat_side_effect
+
+    validator = JsonValidator()
+    orchestrator = TwoStageOrchestrator(
+        client=client,
+        assembler=assembler,
+        router=route_strategy_files,
+        validator=validator,
+        exc_counter=exc_counter,
+        pending_writer=pending_writer,
+        exp_reader=exp_reader,
+    )
+
+    events: list[OrchestratorEvent] = []
+
+    orchestrator.submit(
+        frame=frame,
+        htf_text="",
+        cancel_token=cancel_token,
+        on_event=events.append,
+    )
+
+    # Cancelled event must appear
+    assert OrchestratorEvent.Cancelled in events
+
+    # Stage2Started must NOT appear
+    assert OrchestratorEvent.Stage2Started not in events
+
+    # consecutive_count must remain 0 (user cancel doesn't increment)
+    assert exc_counter.consecutive_count == 0
+
+    # save_partial called with reason "user_cancelled"
+    pending_writer.save_partial.assert_called_once()
+    call_args = pending_writer.save_partial.call_args
+    reason = call_args[0][1] if len(call_args[0]) > 1 else call_args[1].get("reason", "")
+    assert reason == "user_cancelled"

@@ -1,0 +1,484 @@
+"""Two-stage AI analysis orchestrator.
+
+Coordinates the full Stage 1 (diagnosis) → Stage 2 (decision) pipeline:
+  1. Build Stage 1 prompt via PromptAssembler
+  2. Call DeepSeekClient
+  3. Validate Stage 1 JSON
+  4. Route strategy files
+  5. Load experience entries
+  6. Build Stage 2 prompt
+  7. Call DeepSeekClient
+  8. Validate Stage 2 JSON
+  9. Persist full record
+
+Cancel checks are performed before each stage and after each API call.
+Network/timeout errors are caught and recorded without incrementing the
+consecutive exception counter (design §B.14, R8.9).
+"""
+from __future__ import annotations
+
+import dataclasses
+import logging
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from pa_agent.ai.deepseek_client import DeepSeekClient
+    from pa_agent.ai.json_validator import JsonValidator
+    from pa_agent.ai.prompt_assembler import PromptAssembler
+    from pa_agent.config.settings import Settings
+    from pa_agent.orchestrator.exception_counter import ExceptionCounter
+    from pa_agent.records.experience_reader import ExperienceReader
+    from pa_agent.records.pending_writer import PendingWriter
+
+from pa_agent.ai.json_validator import Ok, ValidationError
+from pa_agent.data.base import KlineFrame
+from pa_agent.records.schema import AnalysisRecord, RecordMeta
+from pa_agent.util.threading import CancelToken, OrchestratorEvent
+from pa_agent.util.timefmt import now_local_ms
+
+logger = logging.getLogger(__name__)
+
+
+def _build_empty_record(
+    frame: KlineFrame,
+    htf_text: str,
+    settings: Optional["Settings"],
+) -> AnalysisRecord:
+    """Build a partial AnalysisRecord with meta populated from the frame."""
+    ts_ms = now_local_ms()
+    ts_iso = datetime.fromtimestamp(ts_ms / 1000).isoformat(timespec="milliseconds")
+
+    # Build masked provider snapshot
+    ai_provider: dict[str, Any] = {}
+    if settings is not None:
+        from pa_agent.security.secret_store import mask_secret
+        p = settings.provider
+        ai_provider = {
+            "model": p.model,
+            "base_url": p.base_url,
+            "api_key": mask_secret(p.api_key) if p.api_key else "****",
+            "thinking": p.thinking,
+            "reasoning_effort": p.reasoning_effort,
+            "context_window": p.context_window,
+        }
+
+    # Serialize kline bars
+    kline_data: list[dict] = []
+    for bar in frame.bars:
+        if dataclasses.is_dataclass(bar) and not isinstance(bar, type):
+            kline_data.append(dataclasses.asdict(bar))
+        else:
+            kline_data.append(bar.__dict__)
+
+    meta = RecordMeta(
+        timestamp_local_iso=ts_iso,
+        timestamp_local_ms=ts_ms,
+        symbol=frame.symbol,
+        timeframe=frame.timeframe,
+        bar_count=len(frame.bars),
+        ai_provider=ai_provider,
+    )
+
+    return AnalysisRecord(
+        meta=meta,
+        kline_data=kline_data,
+        htf_text=htf_text,
+        stage1_messages=[],
+        stage1_response=None,
+        stage1_diagnosis=None,
+        stage2_messages=[],
+        stage2_response=None,
+        stage2_decision=None,
+        strategy_files_used=[],
+        experience_loaded=[],
+        exception=None,
+        usage_total={},
+    )
+
+
+def _accumulate_usage(current: dict, reply_usage: Any) -> dict:
+    """Merge an AIUsage object into the running usage_total dict."""
+    result = dict(current)
+    result["prompt_tokens"] = (
+        result.get("prompt_tokens", 0) + getattr(reply_usage, "prompt_tokens", 0)
+    )
+    result["cached_prompt_tokens"] = (
+        result.get("cached_prompt_tokens", 0)
+        + getattr(reply_usage, "cached_prompt_tokens", 0)
+    )
+    result["completion_tokens"] = (
+        result.get("completion_tokens", 0) + getattr(reply_usage, "completion_tokens", 0)
+    )
+    result["total_tokens"] = (
+        result.get("total_tokens", 0) + getattr(reply_usage, "total_tokens", 0)
+    )
+    return result
+
+
+class TwoStageOrchestrator:
+    """Orchestrates the two-stage AI analysis pipeline.
+
+    Parameters
+    ----------
+    client:
+        DeepSeekClient instance for API calls.
+    assembler:
+        PromptAssembler for building Stage 1 and Stage 2 message lists.
+    router:
+        Either the ``route_strategy_files`` function or an object with a
+        ``.route()`` method.
+    validator:
+        JsonValidator for validating Stage 1 and Stage 2 responses.
+    exc_counter:
+        ExceptionCounter for tracking consecutive validation failures.
+    pending_writer:
+        PendingWriter for persisting full and partial records.
+    exp_reader:
+        ExperienceReader for loading top-5 experience entries.
+    settings:
+        Optional Settings object; used for ``ai_provider`` meta and
+        ``reasoning_effort`` forwarding.
+    """
+
+    def __init__(
+        self,
+        client: "DeepSeekClient",
+        assembler: "PromptAssembler",
+        router: Any,
+        validator: "JsonValidator",
+        exc_counter: "ExceptionCounter",
+        pending_writer: "PendingWriter",
+        exp_reader: "ExperienceReader",
+        settings: Optional["Settings"] = None,
+    ) -> None:
+        self._client = client
+        self._assembler = assembler
+        self._router = router
+        self._validator = validator
+        self._exc_counter = exc_counter
+        self._pending_writer = pending_writer
+        self._exp_reader = exp_reader
+        self._settings = settings
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def submit(
+        self,
+        frame: KlineFrame,
+        htf_text: str,
+        cancel_token: CancelToken,
+        on_event: Callable[[OrchestratorEvent], None],
+    ) -> AnalysisRecord:
+        """Run the two-stage analysis pipeline and return an AnalysisRecord.
+
+        The ``on_event`` callback is called synchronously at each pipeline
+        milestone.  The returned record is always fully populated with
+        whatever data was collected before the pipeline terminated (whether
+        by success, validation failure, cancellation, or network error).
+
+        Parameters
+        ----------
+        frame:
+            Immutable KlineFrame snapshot to analyse.
+        htf_text:
+            Higher-timeframe context text entered by the user.
+        cancel_token:
+            Token checked before each stage and after each API call.
+        on_event:
+            Callback invoked with OrchestratorEvent values.
+
+        Returns
+        -------
+        AnalysisRecord
+            Fully or partially populated record.
+        """
+        # ── Step 1: Build partial record ──────────────────────────────────────
+        record = _build_empty_record(frame, htf_text, self._settings)
+
+        # ── Step 2: Pre-Stage-1 cancel check ─────────────────────────────────
+        if cancel_token.is_set():
+            self._pending_writer.save_partial(record, "user_cancelled")
+            self._exc_counter.on_user_cancel("pre_stage1")
+            on_event(OrchestratorEvent.Cancelled)
+            return record
+
+        # ── Step 3: Stage 1 started ───────────────────────────────────────────
+        on_event(OrchestratorEvent.Stage1Started)
+
+        # ── Step 4: Build Stage 1 messages ───────────────────────────────────
+        messages_s1 = self._assembler.build_stage1(frame, htf_text)
+
+        # ── Step 5: Call AI for Stage 1 ───────────────────────────────────────
+        try:
+            reply_s1 = self._client.chat(messages_s1, cancel_token=cancel_token)
+        except Exception as exc:
+            if self._is_network_error(exc):
+                logger.warning("Stage 1 network error: %s", exc)
+                record = record.model_copy(
+                    update={
+                        "stage1_messages": messages_s1,
+                        "exception": {
+                            "type": "network_error",
+                            "stage": "stage1",
+                            "message": str(exc),
+                        },
+                    }
+                )
+                self._exc_counter.on_network_error(exc)
+                self._pending_writer.save_partial(record, "network_error")
+                on_event(OrchestratorEvent.Stage1Failed)
+                return record
+            raise
+
+        # ── Step 6: Post-Stage-1-call cancel check ────────────────────────────
+        if cancel_token.is_set():
+            record = record.model_copy(
+                update={
+                    "stage1_messages": messages_s1,
+                    "stage1_response": reply_s1.raw,
+                    "usage_total": _accumulate_usage(record.usage_total, reply_s1.usage),
+                }
+            )
+            self._pending_writer.save_partial(record, "user_cancelled")
+            self._exc_counter.on_user_cancel("post_stage1_chat")
+            on_event(OrchestratorEvent.Cancelled)
+            return record
+
+        # ── Step 7: Validate Stage 1 ──────────────────────────────────────────
+        result_s1 = self._validator.validate("stage1", reply_s1.content)
+
+        if isinstance(result_s1, ValidationError):
+            err = result_s1
+            logger.warning(
+                "Stage 1 validation failed: category=%s message=%s",
+                err.category,
+                err.message,
+            )
+            self._exc_counter.on_validation_error("stage1", err)
+            record = record.model_copy(
+                update={
+                    "stage1_messages": messages_s1,
+                    "stage1_response": reply_s1.raw,
+                    "usage_total": _accumulate_usage(record.usage_total, reply_s1.usage),
+                    "exception": {
+                        "type": "validation_error",
+                        "stage": "stage1",
+                        "category": err.category,
+                        "message": err.message,
+                        "missing_fields": err.missing_fields,
+                        "invalid_fields": err.invalid_fields,
+                        "raw_text": err.raw_text,
+                        "parse_position": err.parse_position,
+                    },
+                }
+            )
+            self._pending_writer.save_partial(record, f"stage1_{err.category}")
+            on_event(OrchestratorEvent.Stage1Failed)
+            return record
+
+        # Validation passed — extract the parsed JSON
+        assert isinstance(result_s1, Ok)
+        stage1_json: dict = result_s1.obj
+
+        # ── Step 9: Stage 1 done ──────────────────────────────────────────────
+        on_event(OrchestratorEvent.Stage1Done)
+
+        # ── Step 10: Route strategy files ─────────────────────────────────────
+        if callable(self._router) and not hasattr(self._router, "route"):
+            strategy_files: list[str] = self._router(stage1_json)
+        else:
+            strategy_files = self._router.route(stage1_json)
+
+        # ── Step 11: Load experience entries ──────────────────────────────────
+        cycle_position: str = stage1_json.get("cycle_position", "unknown")
+        experience_entries = self._exp_reader.read_top5(cycle_position)
+
+        # ── Step 12: Pre-Stage-2 cancel check ────────────────────────────────
+        if cancel_token.is_set():
+            record = record.model_copy(
+                update={
+                    "stage1_messages": messages_s1,
+                    "stage1_response": reply_s1.raw,
+                    "stage1_diagnosis": stage1_json,
+                    "strategy_files_used": strategy_files,
+                    "experience_loaded": [
+                        e.model_dump() if hasattr(e, "model_dump") else dict(e)
+                        for e in experience_entries
+                    ],
+                    "usage_total": _accumulate_usage(record.usage_total, reply_s1.usage),
+                }
+            )
+            self._pending_writer.save_partial(record, "user_cancelled")
+            self._exc_counter.on_user_cancel("pre_stage2")
+            on_event(OrchestratorEvent.Cancelled)
+            return record
+
+        # ── Step 13: Stage 2 started ──────────────────────────────────────────
+        on_event(OrchestratorEvent.Stage2Started)
+
+        # ── Step 14: Build Stage 2 messages ───────────────────────────────────
+        messages_s2 = self._assembler.build_stage2(
+            frame, stage1_json, strategy_files, experience_entries
+        )
+
+        # ── Step 15: Call AI for Stage 2 ──────────────────────────────────────
+        try:
+            reply_s2 = self._client.chat(messages_s2, cancel_token=cancel_token)
+        except Exception as exc:
+            if self._is_network_error(exc):
+                logger.warning("Stage 2 network error: %s", exc)
+                record = record.model_copy(
+                    update={
+                        "stage1_messages": messages_s1,
+                        "stage1_response": reply_s1.raw,
+                        "stage1_diagnosis": stage1_json,
+                        "stage2_messages": messages_s2,
+                        "strategy_files_used": strategy_files,
+                        "experience_loaded": [
+                            e.model_dump() if hasattr(e, "model_dump") else dict(e)
+                            for e in experience_entries
+                        ],
+                        "usage_total": _accumulate_usage(record.usage_total, reply_s1.usage),
+                        "exception": {
+                            "type": "network_error",
+                            "stage": "stage2",
+                            "message": str(exc),
+                        },
+                    }
+                )
+                self._exc_counter.on_network_error(exc)
+                self._pending_writer.save_partial(record, "network_error")
+                on_event(OrchestratorEvent.Stage2Failed)
+                return record
+            raise
+
+        # ── Step 16: Post-Stage-2-call cancel check ───────────────────────────
+        if cancel_token.is_set():
+            record = record.model_copy(
+                update={
+                    "stage1_messages": messages_s1,
+                    "stage1_response": reply_s1.raw,
+                    "stage1_diagnosis": stage1_json,
+                    "stage2_messages": messages_s2,
+                    "stage2_response": reply_s2.raw,
+                    "strategy_files_used": strategy_files,
+                    "experience_loaded": [
+                        e.model_dump() if hasattr(e, "model_dump") else dict(e)
+                        for e in experience_entries
+                    ],
+                    "usage_total": _accumulate_usage(
+                        _accumulate_usage(record.usage_total, reply_s1.usage),
+                        reply_s2.usage,
+                    ),
+                }
+            )
+            self._pending_writer.save_partial(record, "user_cancelled")
+            self._exc_counter.on_user_cancel("post_stage2_chat")
+            on_event(OrchestratorEvent.Cancelled)
+            return record
+
+        # ── Step 17: Validate Stage 2 ─────────────────────────────────────────
+        result_s2 = self._validator.validate("stage2", reply_s2.content)
+
+        if isinstance(result_s2, ValidationError):
+            err = result_s2
+            logger.warning(
+                "Stage 2 validation failed: category=%s message=%s",
+                err.category,
+                err.message,
+            )
+            self._exc_counter.on_validation_error("stage2", err)
+            record = record.model_copy(
+                update={
+                    "stage1_messages": messages_s1,
+                    "stage1_response": reply_s1.raw,
+                    "stage1_diagnosis": stage1_json,
+                    "stage2_messages": messages_s2,
+                    "stage2_response": reply_s2.raw,
+                    "strategy_files_used": strategy_files,
+                    "experience_loaded": [
+                        e.model_dump() if hasattr(e, "model_dump") else dict(e)
+                        for e in experience_entries
+                    ],
+                    "usage_total": _accumulate_usage(
+                        _accumulate_usage(record.usage_total, reply_s1.usage),
+                        reply_s2.usage,
+                    ),
+                    "exception": {
+                        "type": "validation_error",
+                        "stage": "stage2",
+                        "category": err.category,
+                        "message": err.message,
+                        "missing_fields": err.missing_fields,
+                        "invalid_fields": err.invalid_fields,
+                        "raw_text": err.raw_text,
+                        "parse_position": err.parse_position,
+                    },
+                }
+            )
+            self._pending_writer.save_partial(record, f"stage2_{err.category}")
+            on_event(OrchestratorEvent.Stage2Failed)
+            return record
+
+        # Validation passed
+        assert isinstance(result_s2, Ok)
+        stage2_json: dict = result_s2.obj
+
+        # ── Step 19: Stage 2 done ─────────────────────────────────────────────
+        on_event(OrchestratorEvent.Stage2Done)
+
+        # ── Step 20: Reset exception counter on full success ──────────────────
+        self._exc_counter.on_round_trip_success()
+
+        # ── Step 21: Build final record ───────────────────────────────────────
+        usage_total = _accumulate_usage(
+            _accumulate_usage(record.usage_total, reply_s1.usage),
+            reply_s2.usage,
+        )
+        record = record.model_copy(
+            update={
+                "stage1_messages": messages_s1,
+                "stage1_response": reply_s1.raw,
+                "stage1_diagnosis": stage1_json,
+                "stage2_messages": messages_s2,
+                "stage2_response": reply_s2.raw,
+                "stage2_decision": stage2_json,
+                "strategy_files_used": strategy_files,
+                "experience_loaded": [
+                    e.model_dump() if hasattr(e, "model_dump") else dict(e)
+                    for e in experience_entries
+                ],
+                "usage_total": usage_total,
+                "exception": None,
+            }
+        )
+
+        # ── Step 22: Persist full record ──────────────────────────────────────
+        self._pending_writer.save_full(record)
+
+        # ── Step 23: Record saved event ───────────────────────────────────────
+        on_event(OrchestratorEvent.RecordSaved)
+
+        # ── Step 24: Return ───────────────────────────────────────────────────
+        return record
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_network_error(exc: Exception) -> bool:
+        """Return True if *exc* is a network/timeout error from the openai SDK."""
+        try:
+            import openai  # type: ignore[import]
+            return isinstance(
+                exc,
+                (
+                    openai.APITimeoutError,
+                    openai.APIConnectionError,
+                    openai.APIStatusError,
+                ),
+            )
+        except ImportError:
+            # If openai is not installed, treat any non-CancelledError as network
+            from pa_agent.ai.deepseek_client import CancelledError
+            return not isinstance(exc, CancelledError)

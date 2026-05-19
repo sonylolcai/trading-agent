@@ -1,0 +1,122 @@
+"""Property-based tests for Stage 2 不下单 ↔ null invariant (task 8.5 / PR3)."""
+from __future__ import annotations
+
+import json
+import pytest
+from hypothesis import given, settings as h_settings
+from hypothesis import strategies as st
+from pa_agent.ai.json_validator import JsonValidator, Ok, ValidationError
+
+validator = JsonValidator()
+
+_ORDER_TYPES_WITH_TRADE = ["限价单", "突破单", "市价单"]
+_PRICE_FIELDS = ["entry_price", "take_profit_price", "stop_loss_price"]
+_DIRECTION_FIELD = "order_direction"
+
+
+def _base_decision(**overrides) -> dict:
+    d = {
+        "order_type": "不下单",
+        "order_direction": None,
+        "entry_price": None,
+        "take_profit_price": None,
+        "stop_loss_price": None,
+        "reasoning": "test",
+        "confidence": "low",
+        "key_factors": [],
+        "watch_points": [],
+        "risk_assessment": "test",
+        "invalidation_condition": "test",
+    }
+    d.update(overrides)
+    return d
+
+
+def _base_stage2(decision: dict) -> dict:
+    return {
+        "decision": decision,
+        "diagnosis_summary": {
+            "cycle_position": "normal_channel",
+            "direction": "bullish",
+            "key_signals": [],
+        },
+    }
+
+
+# ── 不下单 side ────────────────────────────────────────────────────────────────
+
+def test_no_order_all_null_accepted():
+    """不下单 with all price fields null is accepted.
+
+    **Validates: Requirements PR3.1**
+    """
+    obj = _base_stage2(_base_decision(order_type="不下单"))
+    result = validator.validate("stage2", json.dumps(obj))
+    assert isinstance(result, Ok), f"Expected Ok, got {result}"
+
+
+@given(
+    price_val=st.one_of(
+        st.floats(allow_nan=False, allow_infinity=False),
+        st.integers(),
+        st.just(0),
+        st.just(0.0),
+    )
+)
+@h_settings(max_examples=100)
+def test_no_order_with_non_null_price_rejected(price_val) -> None:
+    """不下单 with any non-null price field is rejected as category c.
+
+    **Validates: Requirements PR3.1**
+    """
+    for field in _PRICE_FIELDS:
+        decision = _base_decision(order_type="不下单", **{field: price_val})
+        obj = _base_stage2(decision)
+        result = validator.validate("stage2", json.dumps(obj))
+        assert isinstance(result, ValidationError), (
+            f"Expected ValidationError for {field}={price_val!r}, got Ok"
+        )
+        assert result.category == "c", f"Expected category c, got {result.category!r}"
+
+
+# ── 有下单 side ────────────────────────────────────────────────────────────────
+
+@given(order_type=st.sampled_from(_ORDER_TYPES_WITH_TRADE))
+@h_settings(max_examples=50)
+def test_with_order_all_fields_present_accepted(order_type: str) -> None:
+    """有下单 with all required fields present is accepted.
+
+    **Validates: Requirements PR3.1**
+    """
+    decision = _base_decision(
+        order_type=order_type,
+        order_direction="做多",
+        entry_price=2650.0,
+        take_profit_price=2700.0,
+        stop_loss_price=2620.0,
+    )
+    obj = _base_stage2(decision)
+    result = validator.validate("stage2", json.dumps(obj))
+    assert isinstance(result, Ok), f"Expected Ok for {order_type}, got {result}"
+
+
+@given(order_type=st.sampled_from(_ORDER_TYPES_WITH_TRADE))
+@h_settings(max_examples=50)
+def test_with_order_null_price_rejected(order_type: str) -> None:
+    """有下单 with null entry_price is rejected as category c.
+
+    **Validates: Requirements PR3.1**
+    """
+    decision = _base_decision(
+        order_type=order_type,
+        order_direction="做多",
+        entry_price=None,  # must not be null for 有下单
+        take_profit_price=2700.0,
+        stop_loss_price=2620.0,
+    )
+    obj = _base_stage2(decision)
+    result = validator.validate("stage2", json.dumps(obj))
+    assert isinstance(result, ValidationError), (
+        f"Expected ValidationError for {order_type} with null entry_price, got Ok"
+    )
+    assert result.category == "c"
