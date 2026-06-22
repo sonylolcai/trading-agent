@@ -134,6 +134,8 @@ def _latest_closed_bar(kline_frame: Any) -> Any | None:
 def validate_limit_order_k1_freshness(
     decision: dict[str, Any],
     kline_frame: Any,
+    *,
+    bar_analysis: dict[str, Any] | None = None,
 ) -> list[str]:
     """Reject stale limit orders that K1 has already traded through."""
     if decision.get("order_type") != "限价单":
@@ -157,43 +159,112 @@ def validate_limit_order_k1_freshness(
     k_close = float(bar.close)
     long = is_long_direction(decision.get("order_direction"))
 
+    pending_planned = False
+    if isinstance(bar_analysis, dict):
+        entry_bar = bar_analysis.get("entry_bar")
+        if isinstance(entry_bar, dict):
+            freshness = str(entry_bar.get("freshness", "") or "").strip().lower()
+            strength = str(entry_bar.get("strength", "") or "").strip().lower()
+            pending_planned = (
+                freshness == "pending"
+                or strength == "not_triggered"
+                or entry_bar.get("bar") is None
+            )
+
     errors: list[str] = []
     if long is True:
-        # Buy limit waits for price to dip to entry (sl < entry < tp).
-        if k_low <= entry + tick:
-            errors.append(
-                f"limit long: K1 low {k_low:.6g} already touched/below entry {entry:.6g}; "
-                "pending buy limit is stale — use 市价单, reprice, or 不下单"
-            )
+        if pending_planned:
+            # Planned buy limit: entry must stay below market close (waiting for dip).
+            if k_close < entry - tick:
+                errors.append(
+                    f"limit long (planned): K1 close {k_close:.6g} is below entry {entry:.6g}; "
+                    "reprice entry or 不下单"
+                )
+        else:
+            if k_low <= entry + tick:
+                errors.append(
+                    f"limit long: K1 low {k_low:.6g} already touched/below entry {entry:.6g}; "
+                    "pending buy limit is stale — use 市价单, reprice, or 不下单"
+                )
+            if k_close < entry - tick:
+                errors.append(
+                    f"limit long: K1 close {k_close:.6g} is below entry {entry:.6g}; "
+                    "do not keep a buy limit above market without repricing"
+                )
         if k_low <= sl + tick:
             errors.append(
                 f"limit long: K1 low {k_low:.6g} already at/below stop {sl:.6g}; "
                 "plan invalid — order_type=不下单"
             )
-        if k_close < entry - tick:
-            errors.append(
-                f"limit long: K1 close {k_close:.6g} is below entry {entry:.6g}; "
-                "do not keep a buy limit above market without repricing"
-            )
     elif long is False:
-        # Sell limit waits for price to rally to entry (tp < entry < sl).
-        if k_high >= entry - tick:
-            errors.append(
-                f"limit short: K1 high {k_high:.6g} already reached/exceeded entry {entry:.6g}; "
-                "pending sell limit is stale — use 市价单, reprice, or 不下单"
-            )
+        if pending_planned:
+            if k_close > entry + tick:
+                errors.append(
+                    f"limit short (planned): K1 close {k_close:.6g} is above entry {entry:.6g}; "
+                    "reprice entry or 不下单"
+                )
+        else:
+            if k_high >= entry - tick:
+                errors.append(
+                    f"limit short: K1 high {k_high:.6g} already reached/exceeded entry {entry:.6g}; "
+                    "pending sell limit is stale — use 市价单, reprice, or 不下单"
+                )
+            if k_close > entry + tick:
+                errors.append(
+                    f"limit short: K1 close {k_close:.6g} is above entry {entry:.6g}; "
+                    "do not keep a sell limit below market without repricing"
+                )
         if k_high >= sl - tick:
             errors.append(
                 f"limit short: K1 high {k_high:.6g} already at/above stop {sl:.6g}; "
                 "plan invalid — order_type=不下单"
             )
-        if k_close > entry + tick:
-            errors.append(
-                f"limit short: K1 close {k_close:.6g} is above entry {entry:.6g}; "
-                "do not keep a sell limit below market without repricing"
-            )
 
     return errors
+
+
+def validate_take_profit_2_geometry(
+    decision: dict[str, Any],
+) -> list[str]:
+    """Ensure TP2 is beyond TP1 in the profit direction (no RR cap on TP2)."""
+    entry = decision.get("entry_price")
+    tp1 = decision.get("take_profit_price")
+    tp2 = decision.get("take_profit_price_2")
+    sl = decision.get("stop_loss_price")
+    direction = decision.get("order_direction")
+
+    try:
+        e = float(entry)
+        t1 = float(tp1)
+        t2 = float(tp2)
+        s = float(sl)
+    except (TypeError, ValueError):
+        return ["decision.take_profit_price_2: required finite number when placing an order"]
+
+    long = is_long_direction(direction)
+    if long is True:
+        if not (s < e < t1 < t2):
+            return [
+                "decision.take_profit_price_2: long plan requires "
+                "stop < entry < take_profit_price < take_profit_price_2"
+            ]
+    elif long is False:
+        if not (t2 < t1 < e < s):
+            return [
+                "decision.take_profit_price_2: short plan requires "
+                "take_profit_price_2 < take_profit_price < entry < stop"
+            ]
+    else:
+        if t1 > e and t2 <= t1:
+            return [
+                "decision.take_profit_price_2: must be above take_profit_price for long geometry"
+            ]
+        if t1 < e and t2 >= t1:
+            return [
+                "decision.take_profit_price_2: must be below take_profit_price for short geometry"
+            ]
+
+    return []
 
 
 def validate_order_trade_metrics(
@@ -201,6 +272,7 @@ def validate_order_trade_metrics(
     *,
     decision_stance: str | None = None,
     kline_frame: Any = None,
+    bar_analysis: dict[str, Any] | None = None,
 ) -> list[str]:
     """Validate entry/TP/SL geometry, RR floor, and trader equation for live orders."""
     order_type = decision.get("order_type")
@@ -253,6 +325,12 @@ def validate_order_trade_metrics(
         )
 
     if kline_frame is not None:
-        errors.extend(validate_limit_order_k1_freshness(decision, kline_frame))
+        errors.extend(
+            validate_limit_order_k1_freshness(
+                decision, kline_frame, bar_analysis=bar_analysis
+            )
+        )
+
+    errors.extend(validate_take_profit_2_geometry(decision))
 
     return errors

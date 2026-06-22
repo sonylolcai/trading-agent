@@ -314,7 +314,7 @@ class SettingsDialog(QDialog):
             getattr(g, "decision_flow_play_seconds", 50)
         )
         self._flow_default_zoom_spin.setValue(
-            int(getattr(g, "decision_flow_default_zoom_pct", 500))
+            int(getattr(g, "decision_flow_default_zoom_pct", 600))
         )
 
     @staticmethod
@@ -403,9 +403,9 @@ class SettingsDialog(QDialog):
             p.model = model
             p.base_url = base_url
             p.api_key = self._api_key_edit.text()
-            p.thinking = self._thinking_check.isChecked()
-            p.reasoning_effort = self._reasoning_effort_combo.currentText()  # type: ignore[assignment]
-            # context_window is no longer editable in UI; use code-level default
+
+        p.thinking = self._thinking_check.isChecked()
+        p.reasoning_effort = self._reasoning_effort_combo.currentText()  # type: ignore[assignment]
 
         g.analysis_bar_count = self._analysis_bar_count_spin.value()
         g.refresh_interval_ms = self._refresh_interval_spin.value()

@@ -271,9 +271,8 @@ def apply_qclaw_provider_to_settings(
     provider.model = resolved.model
     provider.base_url = resolved.base_url
     provider.api_key = resolved.api_key
-    provider.thinking = resolved.thinking
-    provider.reasoning_effort = resolved.reasoning_effort
     provider.context_window = resolved.context_window
+    # Preserve user/GUI thinking prefs — only connector fields (url/key/model) are authoritative.
 
     ok, health_msg = qclaw_health_check(prefer_relay=False)
     if not ok:
@@ -284,7 +283,7 @@ def apply_qclaw_provider_to_settings(
 def qclaw_provider_settings(
     model: str | None = None,
     thinking: bool = True,
-    reasoning_effort: str = "max",
+    reasoning_effort: str = "high",
     context_window: int = 2_000_000,
     *,
     prefer_relay: bool = False,

@@ -13,7 +13,7 @@ def test_defaults(tmp_path):
     assert s.provider.model == "deepseek-v4-flash"
     assert s.provider.base_url == "https://api.deepseek.com"
     assert s.provider.thinking is True
-    assert s.provider.reasoning_effort == "max"
+    assert s.provider.reasoning_effort == "high"
     assert s.provider.context_window == 2_000_000
     assert s.general.analysis_bar_count == 100
     assert s.general.last_symbol == "XAUUSDm"

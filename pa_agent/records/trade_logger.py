@@ -46,6 +46,7 @@ _CSV_FIELDNAMES = [
     "entry_price",
     "stop_loss_price",
     "take_profit_price",
+    "take_profit_price_2",
     "entry_rule",
     "entry_basis_bar",
     "entry_basis_extreme",
@@ -150,6 +151,7 @@ def _render_chart(bars_newest_first: list[Any], ema20_newest_first: list[float],
                   entry_price: float | None = None,
                   stop_loss_price: float | None = None,
                   take_profit_price: float | None = None,
+                  take_profit_price_2: float | None = None,
                   order_direction: str = "",
                   order_type: str = "",
                   diagnosis_confidence: str = "",
@@ -160,7 +162,7 @@ def _render_chart(bars_newest_first: list[Any], ema20_newest_first: list[float],
     Returns True on success, False if matplotlib is unavailable.
     bars_newest_first: list of KlineBar (or dict with open/high/low/close/ts_open/seq).
     ema20_newest_first: aligned EMA20 values (NaN for warm-up bars).
-    entry_price / stop_loss_price / take_profit_price: optional price levels drawn
+    entry_price / stop_loss_price / take_profit_price / take_profit_price_2: optional price levels drawn
     as horizontal dashed lines extending into the right-side margin.
     """
     try:
@@ -304,13 +306,16 @@ def _render_chart(bars_newest_first: list[Any], ema20_newest_first: list[float],
     _is_long = "short" not in order_direction.lower() and "做空" not in order_direction
     _ENTRY_COLOR = "#60a5fa"   # blue
     _TP_COLOR    = "#4ade80"   # green
+    _TP2_COLOR   = "#86efac"   # lighter green
     _SL_COLOR    = "#f87171"   # red
 
     _price_lines: list[tuple[float, str, str]] = []  # (price, color, label)
     if entry_price is not None:
         _price_lines.append((entry_price, _ENTRY_COLOR, f"入场  {entry_price}"))
     if take_profit_price is not None:
-        _price_lines.append((take_profit_price, _TP_COLOR, f"止盈  {take_profit_price}"))
+        _price_lines.append((take_profit_price, _TP_COLOR, f"TP1  {take_profit_price}"))
+    if take_profit_price_2 is not None:
+        _price_lines.append((take_profit_price_2, _TP2_COLOR, f"TP2  {take_profit_price_2}"))
     if stop_loss_price is not None:
         _price_lines.append((stop_loss_price, _SL_COLOR, f"止损  {stop_loss_price}"))
 
@@ -392,7 +397,10 @@ def _render_chart(bars_newest_first: list[Any], ema20_newest_first: list[float],
                                      linestyle="--", label="入场"))
     if take_profit_price is not None:
         legend_handles.append(Line2D([0], [0], color=_TP_COLOR, linewidth=1.0,
-                                     linestyle="--", label="止盈"))
+                                     linestyle="--", label="TP1"))
+    if take_profit_price_2 is not None:
+        legend_handles.append(Line2D([0], [0], color=_TP2_COLOR, linewidth=1.0,
+                                     linestyle="--", label="TP2"))
     if stop_loss_price is not None:
         legend_handles.append(Line2D([0], [0], color=_SL_COLOR, linewidth=1.0,
                                      linestyle="--", label="止损"))
@@ -493,6 +501,7 @@ def _save_trade_record_impl(
                 entry_price=_parse_sr_price(dec.get("entry_price")),
                 stop_loss_price=_parse_sr_price(dec.get("stop_loss_price")),
                 take_profit_price=_parse_sr_price(dec.get("take_profit_price")),
+                take_profit_price_2=_parse_sr_price(dec.get("take_profit_price_2")),
                 order_direction=str(dec.get("order_direction") or ""),
                 order_type=str(dec.get("order_type") or ""),
                 diagnosis_confidence=str(dec.get("diagnosis_confidence") or ""),
@@ -521,6 +530,7 @@ def _save_trade_record_impl(
         "entry_price": _get(dec, "entry_price"),
         "stop_loss_price": _get(dec, "stop_loss_price"),
         "take_profit_price": _get(dec, "take_profit_price"),
+        "take_profit_price_2": _get(dec, "take_profit_price_2"),
         "entry_rule": _get(dec, "entry_rule"),
         "entry_basis_bar": _get(dec, "entry_basis_bar"),
         "entry_basis_extreme": _get(dec, "entry_basis_extreme"),

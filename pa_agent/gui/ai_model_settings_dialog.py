@@ -147,8 +147,9 @@ class AIModelSettingsDialog(QDialog):
             p.model = model
             p.base_url = base_url
             p.api_key = self._api_key_edit.text()
-            p.thinking = self._thinking_check.isChecked()
-            p.reasoning_effort = self._reasoning_effort_combo.currentText()  # type: ignore[assignment]
+
+        p.thinking = self._thinking_check.isChecked()
+        p.reasoning_effort = self._reasoning_effort_combo.currentText()  # type: ignore[assignment]
 
         save_settings(self._settings, SETTINGS_JSON_PATH)
         self.accept()

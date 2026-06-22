@@ -18,7 +18,7 @@ class AIProviderSettings(BaseModel):
     api_key: str = ""
     api_key_encrypted: str = ""
     thinking: bool = True
-    reasoning_effort: Literal["low", "medium", "high", "max"] = "max"
+    reasoning_effort: Literal["low", "medium", "high", "max"] = "high"
     context_window: int = 2_000_000
 
 
@@ -28,7 +28,7 @@ class PromptSettings(BaseModel):
 
     #: When True, Stage 2 loads every strategy .txt (legacy/test behaviour).
     stage2_load_full_strategy_library: bool = False
-    experience_max_entries: int = Field(default=3, ge=0, le=10)
+    experience_max_entries: int = Field(default=0, ge=0, le=10)
     experience_max_chars_per_entry: int = Field(default=400, ge=100, le=4000)
     #: Inject pattern判定表 + 速查 brief into Stage 1 user prompt (reduces missed tags).
     stage1_inject_pattern_briefs: bool = True
@@ -77,7 +77,7 @@ class GeneralSettings(BaseModel):
     #: 阶段二交易倾向：balanced=默认；conservative/aggressive 逐级调整下单意愿
     decision_stance: DecisionStance = "balanced"
     #: 决策树可视化：在「整图适配」基础上的缩放百分比（100=与适配一致；可任意放大，仅下限 10%）
-    decision_flow_default_zoom_pct: int = Field(default=500, ge=10)
+    decision_flow_default_zoom_pct: int = Field(default=600, ge=10)
     #: 「实时」页思考过程/撰写回答框与追问输入框的等宽字体字号（pt）
     stream_pane_font_pt: int = Field(default=11, ge=8, le=28)
     #: K 线图上 #序号 标签的字号（pt）

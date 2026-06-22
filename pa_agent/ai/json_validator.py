@@ -709,7 +709,13 @@ class JsonValidator:
             return None
 
         order_type = decision.get("order_type")
-        price_fields = ["entry_price", "take_profit_price", "stop_loss_price", "order_direction"]
+        price_fields = [
+            "entry_price",
+            "take_profit_price",
+            "take_profit_price_2",
+            "stop_loss_price",
+            "order_direction",
+        ]
 
         if order_type == "不下单":
             violated = [f for f in price_fields if decision.get(f) is not None]
@@ -726,6 +732,7 @@ class JsonValidator:
                     "allowed": {
                         "entry_price": ["<finite number>"],
                         "take_profit_price": ["<finite number>"],
+                        "take_profit_price_2": ["<finite number>"],
                         "stop_loss_price": ["<finite number>"],
                         "order_direction": ["做多", "做空"],
                     },
@@ -785,6 +792,9 @@ class JsonValidator:
             decision,
             decision_stance=decision_stance,
             kline_frame=kline_frame,
+            bar_analysis=obj.get("bar_analysis")
+            if isinstance(obj.get("bar_analysis"), dict)
+            else None,
         )
 
     @staticmethod

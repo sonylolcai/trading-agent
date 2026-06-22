@@ -34,6 +34,32 @@ def test_openclaw_overrides_user_url_and_key() -> None:
     assert s.provider.api_key == "tok-from-qclaw"
 
 
+def test_openclaw_apply_preserves_user_thinking_prefs() -> None:
+    """QClaw sync must not reset thinking/reasoning_effort from settings."""
+    s = Settings()
+    s.provider.model = "openclaw"
+    s.provider.thinking = False
+    s.provider.reasoning_effort = "low"
+
+    with patch("pa_agent.ai.qclaw_connector.detect_qclaw", return_value=True), patch(
+        "pa_agent.ai.qclaw_connector.qclaw_provider_settings"
+    ) as resolve, patch("pa_agent.ai.qclaw_connector.qclaw_health_check", return_value=(True, "ok")):
+        resolved = MagicMock()
+        resolved.model = "openclaw"
+        resolved.base_url = "http://127.0.0.1:51187/v1"
+        resolved.api_key = "tok"
+        resolved.thinking = True
+        resolved.reasoning_effort = "max"
+        resolved.context_window = 2_000_000
+        resolve.return_value = resolved
+
+        err = apply_qclaw_provider_to_settings(s, preferred_model="openclaw")
+        assert err is None
+
+    assert s.provider.thinking is False
+    assert s.provider.reasoning_effort == "low"
+
+
 def test_openclaw_wb_overrides_user_url_and_key() -> None:
     """When model is openclaw_wb*, user-filled base_url/api_key must be ignored."""
     s = Settings()
@@ -61,6 +87,35 @@ def test_openclaw_wb_overrides_user_url_and_key() -> None:
 
     assert s.provider.base_url == "https://copilot.tencent.com/v2"
     assert s.provider.api_key == "tok-from-workbuddy"
+
+
+def test_openclaw_wb_apply_preserves_user_thinking_prefs() -> None:
+    """WorkBuddy sync must not reset thinking/reasoning_effort from settings."""
+    s = Settings()
+    s.provider.model = "openclaw_wb/deepseek-v4-flash"
+    s.provider.thinking = False
+    s.provider.reasoning_effort = "medium"
+
+    with patch("pa_agent.ai.workbuddy_connector.detect_workbuddy", return_value=True), patch(
+        "pa_agent.ai.workbuddy_connector.workbuddy_provider_settings"
+    ) as resolve, patch(
+        "pa_agent.ai.workbuddy_connector.workbuddy_health_check",
+        return_value=(True, "ok"),
+    ):
+        resolved = MagicMock()
+        resolved.model = "openclaw_wb/deepseek-v4-flash"
+        resolved.base_url = "https://copilot.tencent.com/v2"
+        resolved.api_key = "tok"
+        resolved.thinking = True
+        resolved.reasoning_effort = "max"
+        resolved.context_window = 2_000_000
+        resolve.return_value = resolved
+
+        err = apply_workbuddy_provider_to_settings(s)
+        assert err is None
+
+    assert s.provider.thinking is False
+    assert s.provider.reasoning_effort == "medium"
 
 
 def test_openclaw_wb_on_load_keeps_submodel_from_settings() -> None:
