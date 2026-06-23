@@ -7,6 +7,7 @@ describe('toChartCandles', () => {
     const frame: KlineFramePayload = {
       symbol: '000001',
       timeframe: '1h',
+      bar_count: 2,
       order: 'newest_first',
       snapshot_ts_local_ms: 123,
       indicators: { ema20: [12, 10], atr14: [1.5, 1.2] },

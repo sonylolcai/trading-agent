@@ -57,6 +57,7 @@ def test_frame_payload_preserves_newest_first_contract() -> None:
     payload = frame_to_payload(frame)
 
     assert payload["order"] == "newest_first"
+    assert payload["bar_count"] == 2
     assert [bar["seq"] for bar in payload["bars"]] == [1, 2]
     assert payload["bars"][0]["ts_open"] == 3000
     assert payload["indicators"]["ema20"] == [11.5, 10.0]

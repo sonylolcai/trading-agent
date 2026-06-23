@@ -1,9 +1,13 @@
 import type {
+  AnalysisStartResponse,
+  AnalysisStatusResponse,
+  BacktestRebuildResponse,
   DataSourcesResponse,
   KlineCacheResponse,
   MarketSnapshotResponse,
   RecordsResponse,
   SettingsPayload,
+  SetupStatsResponse,
   TimeframesResponse,
 } from '../types/api';
 
@@ -13,11 +17,12 @@ export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; status?: number };
 
-async function request<T>(path: string): Promise<ApiResult<T>> {
+async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       cache: 'no-store',
-      headers: { Accept: 'application/json' },
+      ...init,
+      headers: { Accept: 'application/json', ...init?.headers },
     });
 
     if (!response.ok) {
@@ -47,4 +52,13 @@ export const api = {
   klineCache: () => request<KlineCacheResponse>('/api/kline-cache'),
   snapshot: () => request<MarketSnapshotResponse>('/api/market/snapshot?bars=100&include_forming=false'),
   records: () => request<RecordsResponse>('/api/records'),
+  startAnalysis: () => request<AnalysisStartResponse>('/api/analysis', { method: 'POST' }),
+  analysisStatus: (id: string) => request<AnalysisStatusResponse>(`/api/analysis/${encodeURIComponent(id)}`),
+  cancelAnalysis: (id: string) => request<AnalysisStatusResponse>(`/api/analysis/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  rebuildSetupStats: () => request<BacktestRebuildResponse>('/api/backtest/rebuild-setup-stats', { method: 'POST' }),
+  setupStats: () => request<SetupStatsResponse>('/api/backtest/setup-stats'),
 };
+
+export function analysisEventsUrl(id: string): string {
+  return `${API_BASE_URL}/api/analysis/${encodeURIComponent(id)}/events`;
+}

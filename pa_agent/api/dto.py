@@ -77,6 +77,7 @@ def frame_to_payload(frame: KlineFrame) -> dict[str, Any]:
     return {
         "symbol": frame.symbol,
         "timeframe": frame.timeframe,
+        "bar_count": len(frame.bars),
         "order": "newest_first",
         "snapshot_ts_local_ms": frame.snapshot_ts_local_ms,
         "bars": [bar_to_payload(bar) for bar in frame.bars],
@@ -84,6 +85,49 @@ def frame_to_payload(frame: KlineFrame) -> dict[str, Any]:
             "ema20": [_json_float(value) for value in frame.indicators.ema20],
             "atr14": [_json_float(value) for value in frame.indicators.atr14],
         },
+    }
+
+
+def analysis_record_to_payload(record: AnalysisRecord) -> dict[str, Any]:
+    """Return a compact analysis task result without local record file paths."""
+    return {
+        "timestamp_local_iso": record.meta.timestamp_local_iso,
+        "timestamp_local_ms": record.meta.timestamp_local_ms,
+        "symbol": record.meta.symbol,
+        "timeframe": record.meta.timeframe,
+        "bar_count": record.meta.bar_count,
+        "decision_stance": record.meta.decision_stance,
+        "stage1_diagnosis": record.stage1_diagnosis,
+        "stage2_decision": record.stage2_decision,
+        "exception": record.exception,
+        "usage_total": record.usage_total,
+    }
+
+
+def setup_stats_row_to_payload(key: str, values: list[float]) -> dict[str, Any]:
+    """Return one compact setup-stat table row."""
+    parts = key.split("|")
+    padded = [*parts, *[""] * max(0, 7 - len(parts))]
+    sample_count = len(values)
+    wins = sum(1 for value in values if value > 0)
+    losses = sum(1 for value in values if value < 0)
+    total_r = sum(values)
+    return {
+        "setup_key": key,
+        "key": key,
+        "symbol_class": padded[0],
+        "timeframe_bucket": padded[1],
+        "cycle_position": padded[2],
+        "direction": padded[3],
+        "order_type": padded[4],
+        "patterns": padded[5],
+        "decision_stance": padded[6],
+        "sample_count": sample_count,
+        "wins": wins,
+        "losses": losses,
+        "total_r": total_r,
+        "win_rate_pct": wins / sample_count * 100.0 if sample_count else 0.0,
+        "expectancy_r": total_r / sample_count if sample_count else 0.0,
     }
 
 

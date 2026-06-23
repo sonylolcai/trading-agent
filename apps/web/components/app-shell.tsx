@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, History, Terminal } from 'lucide-react';
+import { Activity, BarChart3, History, Terminal } from 'lucide-react';
 
 const navItems = [
   { href: '/terminal', label: 'Terminal', icon: Terminal },
   { href: '/history', label: 'History', icon: History },
+  { href: '/backtest', label: 'Backtest', icon: BarChart3 },
 ];
 
 type AppShellProps = {
