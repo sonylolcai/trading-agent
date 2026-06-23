@@ -16,6 +16,7 @@ from pa_agent.data.market_defaults import (
     resolve_tv_pair,
     tv_auto_probe_plan,
     tv_forex_auto_probe_plan,
+    TV_GOLD_SYMBOL_BY_EXCHANGE,
 )
 from pa_agent.data.tradingview import TV_EXCHANGE_PRESETS
 
@@ -39,11 +40,7 @@ def test_tv_exchange_auto_preserved():
 def test_tv_forex_auto_probe_tries_all_forex_presets():
     plan = tv_forex_auto_probe_plan("XAUUSD")
     exchanges = [ex for ex, _ in plan]
-    assert exchanges == [
-        ex
-        for ex in TV_EXCHANGE_PRESETS
-        if ex and ex not in {"SSE", "SZSE", "HKEX"}
-    ]
+    assert exchanges == [ex for ex in TV_EXCHANGE_PRESETS if ex in TV_GOLD_SYMBOL_BY_EXCHANGE]
     assert ("OANDA", "XAUUSD") in plan
     assert ("TVC", "GOLD") in plan
 
@@ -103,6 +100,12 @@ def test_tradingview_kind_keeps_ashare_symbol():
     assert normalize_gold_symbol_for_kind("tradingview", "600519") == "600519"
 
 
+def test_ashare_kinds_rewrite_gold_symbol_to_ashare_default():
+    assert normalize_gold_symbol_for_kind("eastmoney", "XAUUSDm") == "000001"
+    assert normalize_gold_symbol_for_kind("akshare", "BTCUSDT") == "000001"
+    assert normalize_gold_symbol_for_kind("tushare", "") == "000001"
+
+
 def test_numeric_hk_style_code_not_rewritten_to_xauusd():
     ex, sym, adjusted = resolve_tv_pair("", "00988")
     assert (ex, sym, adjusted) == ("", "00988", False)
@@ -125,3 +128,15 @@ def test_migrate_general_fixes_tvc_xauusd():
     migrate_general_gold_defaults(general)
     assert general["last_tradingview_exchange"] == "TVC"
     assert general["last_symbol"] == "GOLD"
+
+
+def test_migrate_general_missing_source_defaults_to_eastmoney_ashare():
+    general = {
+        "last_symbol": "XAUUSDm",
+        "last_tradingview_exchange": "OANDA",
+    }
+
+    migrate_general_gold_defaults(general)
+
+    assert general["last_data_source"] == "eastmoney"
+    assert general["last_symbol"] == "000001"

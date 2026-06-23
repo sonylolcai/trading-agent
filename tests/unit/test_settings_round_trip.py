@@ -16,8 +16,9 @@ def test_defaults(tmp_path):
     assert s.provider.reasoning_effort == "max"
     assert s.provider.context_window == 2_000_000
     assert s.general.analysis_bar_count == 100
-    assert s.general.last_symbol == "XAUUSDm"
-    assert s.general.last_timeframe == "15m"
+    assert s.general.last_data_source == "eastmoney"
+    assert s.general.last_symbol == "000001"
+    assert s.general.last_timeframe == "1h"
     assert s.general.decision_stance == "balanced"
     assert s.general.decision_flow_auto_play is True
     assert s.general.auto_resume_chart_after_analysis is False
@@ -33,9 +34,24 @@ def test_round_trip(tmp_path):
     save_settings(original, p)
     loaded = load_settings(p)
     assert loaded.provider.api_key == "sk-test-1234"
-    # Crypto symbols migrate to gold defaults on load
-    assert loaded.general.last_symbol == "XAUUSDm"
+    # Default source is A-share, so crypto symbols migrate to the A-share default.
+    assert loaded.general.last_data_source == "eastmoney"
+    assert loaded.general.last_symbol == "000001"
     assert loaded.provider.model == original.provider.model
+
+
+def test_explicit_mt5_source_preserves_gold_default_on_load(tmp_path):
+    """Users who explicitly choose MT5 still get MT5/gold normalization."""
+    p = tmp_path / "settings.json"
+    original = Settings()
+    original.general.last_data_source = "mt5"
+    original.general.last_symbol = "BTCUSDT"
+    save_settings(original, p)
+
+    loaded = load_settings(p)
+
+    assert loaded.general.last_data_source == "mt5"
+    assert loaded.general.last_symbol == "XAUUSDm"
 
 
 def test_api_key_present_on_disk(tmp_path):

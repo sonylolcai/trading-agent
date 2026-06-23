@@ -286,6 +286,17 @@ def _accumulate_usage_calls(current: dict, usage_calls: list[Any]) -> dict:
     return total
 
 
+def _default_setup_stats_ledger() -> Any | None:
+    try:
+        from pa_agent.backtest.stats_store import SetupStatsLedger
+        from pa_agent.config.paths import SETUP_STATS_JSON_PATH
+
+        return SetupStatsLedger.load_json(SETUP_STATS_JSON_PATH)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("setup stats ledger unavailable: %s", exc)
+        return None
+
+
 class TwoStageOrchestrator:
     """Orchestrates the two-stage AI analysis pipeline.
 
@@ -318,6 +329,7 @@ class TwoStageOrchestrator:
         pending_writer: "PendingWriter",
         exp_reader: "ExperienceReader",
         settings: Optional["Settings"] = None,
+        setup_stats_ledger: Any | None = None,
     ) -> None:
         self._client = client
         self._assembler = assembler
@@ -326,6 +338,11 @@ class TwoStageOrchestrator:
         self._pending_writer = pending_writer
         self._exp_reader = exp_reader
         self._settings = settings
+        self._setup_stats_ledger = (
+            setup_stats_ledger
+            if setup_stats_ledger is not None
+            else _default_setup_stats_ledger()
+        )
 
     def _validation_settings(self) -> Any:
         if self._settings is not None and hasattr(self._settings, "validation"):
@@ -620,6 +637,22 @@ class TwoStageOrchestrator:
         else:
             experience_entries = self._exp_reader.read_top5(cycle_position)[:max_exp]
 
+        historical_stats: dict[str, Any] | None = None
+        if self._setup_stats_ledger is not None and hasattr(
+            self._setup_stats_ledger,
+            "historical_fields_for_stage1",
+        ):
+            try:
+                historical_stats = self._setup_stats_ledger.historical_fields_for_stage1(
+                    symbol=frame.symbol,
+                    timeframe=frame.timeframe,
+                    stage1_diagnosis=stage1_json,
+                    decision_stance=record.meta.decision_stance,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("setup stats lookup failed: %s", exc)
+                historical_stats = None
+
         # ── Step 12: Pre-Stage-2 cancel check ────────────────────────────────
         if cancel_token.is_set():
             record = record.model_copy(
@@ -695,6 +728,7 @@ class TwoStageOrchestrator:
             decision_stance=record.meta.decision_stance,
             previous_record=previous_record,
             enable_next_bar_prediction=_enable_next_bar,
+            historical_stats=historical_stats,
         )
 
         # ── Step 15: Call AI for Stage 2 ──────────────────────────────────────

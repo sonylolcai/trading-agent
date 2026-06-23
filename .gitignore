@@ -21,9 +21,11 @@ venv/
 config/settings.json
 config/settings.local.json
 config/exception_state.json
+config/setup_stats.json
 config/secret.key
 config/tv_symbol_aliases.json
 config/feishu.json
+cache/
 *.pem
 *.key
 

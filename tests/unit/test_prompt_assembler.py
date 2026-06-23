@@ -252,6 +252,51 @@ def test_stage2_experience_entries_included(assembler: PromptAssembler):
     assert "案例 1" in user
 
 
+def test_stage2_experience_entries_render_outcome_labels(assembler: PromptAssembler):
+    frame = _make_frame()
+    entries = [
+        {
+            "cycle_position": "broad_channel",
+            "direction": "做多",
+            "outcome": {"label": "win", "r_multiple": 1.2},
+        },
+        {
+            "cycle_position": "broad_channel",
+            "direction": "做多",
+            "outcome": {"label": "loss", "r_multiple": -1.0, "exit_reason": "stop_loss"},
+        },
+    ]
+
+    messages = assembler.build_stage2(frame, {}, [], entries)
+    user = messages[1]["content"]
+
+    assert "+1.20R" in user
+    assert "-1.00R" in user
+    assert "stop_loss" in user
+
+
+def test_stage2_prompt_includes_historical_setup_stats(assembler: PromptAssembler):
+    frame = _make_frame()
+    messages = assembler.build_stage2(
+        frame,
+        {"cycle_position": "broad_channel", "direction": "bullish"},
+        [],
+        [],
+        historical_stats={
+            "estimated_win_rate_basis": "historical",
+            "historical_win_rate_for_this_setup": 52.3,
+            "historical_sample_count": 47,
+            "historical_expectancy_r": 0.18,
+        },
+    )
+    user = messages[1]["content"]
+
+    assert "historical_sample_count" in user
+    assert "estimated_win_rate_basis" in user
+    assert "52.3" in user
+    assert "47" in user
+
+
 def test_stage2_system_prompt_only_matches_build_stage2(assembler: PromptAssembler):
     """stage2_system_prompt_only must return the same system content as build_stage2."""
     frame = _make_frame()

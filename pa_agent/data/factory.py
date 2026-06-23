@@ -19,14 +19,18 @@ DataSourceKind = Literal[
     "yfinance",
 ]
 
-# UI-visible sources only — ``eastmoney`` is config/programmatic, not listed here.
+# UI-visible sources. A-share sources are first because this app's default
+# workflow is stock analysis; MT5 remains available for explicit gold/forex use.
 DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
-    ("mt5", "MT5"),
+    ("eastmoney", "东方财富(A股)"),
+    ("akshare", "AkShare(A股)"),
+    ("tushare", "Tushare(A股/需Token)"),
     ("tradingview", "TradingView"),
+    ("mt5", "MT5"),
 )
 
 _HIDDEN_KINDS: frozenset[DataSourceKind] = frozenset(
-    {"akshare", "eastmoney", "tushare", "yfinance"}
+    {"yfinance"}
 )
 
 _DEFAULT_SYMBOLS: dict[DataSourceKind, str] = {
@@ -45,11 +49,11 @@ def default_tradingview_exchange() -> str:
 
 
 def normalize_data_source_kind(kind: str | None) -> DataSourceKind:
-    """Return a supported data-source kind, defaulting to MT5."""
+    """Return a supported data-source kind, defaulting to East Money A-shares."""
     supported = {k for k, _ in DATA_SOURCE_CHOICES} | _HIDDEN_KINDS
     if kind in supported:
         return kind  # type: ignore[return-value]
-    return "mt5"
+    return "eastmoney"
 
 
 def data_source_label(kind: str | None) -> str:

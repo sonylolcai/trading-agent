@@ -21,8 +21,11 @@ RECORDS_PENDING_DIR: Path = PROJECT_ROOT / "records" / "pending"
 EXPERIENCE_DIR: Path = PROJECT_ROOT / "experience"
 CONFIG_DIR: Path = PROJECT_ROOT / "config"
 LOGS_DIR: Path = PROJECT_ROOT / "logs"
+CACHE_DIR: Path = PROJECT_ROOT / "cache"
+KLINE_CACHE_DIR: Path = CACHE_DIR / "kline"
 
 # ── Individual file paths ─────────────────────────────────────────────────────
 FEISHU_JSON_LEGACY_PATH: Path = CONFIG_DIR / "feishu.json"
 SETTINGS_JSON_PATH: Path = CONFIG_DIR / "settings.json"
 LOG_FILE_PATH: Path = LOGS_DIR / "pa_agent.log"
+SETUP_STATS_JSON_PATH: Path = CONFIG_DIR / "setup_stats.json"

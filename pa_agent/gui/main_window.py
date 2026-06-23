@@ -316,7 +316,21 @@ class MainWindow(QMainWindow):
         _general_action.triggered.connect(self._open_general_settings_dialog)
         menu_bar.addAction(_general_action)
 
-        # 4. 演示模式 — 保留下拉菜单
+        # 4. 回测统计 — rebuild setup statistics from saved records
+        _backtest_stats_action = QAction("生成回测统计", self)
+        _backtest_stats_action.setToolTip(
+            "扫描 records/pending 中的历史分析记录，保守模拟已保存三价并生成 config/setup_stats.json"
+        )
+        _backtest_stats_action.triggered.connect(self._on_rebuild_setup_stats)
+        menu_bar.addAction(_backtest_stats_action)
+
+        # 5. 分析历史 — browse saved records
+        _analysis_history_action = QAction("分析历史", self)
+        _analysis_history_action.setToolTip("查看 records/pending 中保存的历史分析摘要")
+        _analysis_history_action.triggered.connect(self._open_analysis_history_dialog)
+        menu_bar.addAction(_analysis_history_action)
+
+        # 6. 演示模式 — 保留下拉菜单
         demo_menu = menu_bar.addMenu("演示模式")
         self._demo_manual_action = QAction("手动选择记录…", self)
         self._demo_manual_action.triggered.connect(lambda: self._on_demo_menu_action("manual"))
@@ -344,19 +358,19 @@ class MainWindow(QMainWindow):
         ctrl_layout.setSpacing(8)
 
         _settings = getattr(self._ctx, "settings", None)
-        _last_symbol = "XAUUSDm"
-        _last_tf = "15m"
+        _last_symbol = "000001"
+        _last_tf = "1h"
         if _settings is not None:
-            _last_symbol = getattr(_settings.general, "last_symbol", "XAUUSDm") or "XAUUSDm"
-            _last_tf = getattr(_settings.general, "last_timeframe", "15m") or "15m"
+            _last_symbol = getattr(_settings.general, "last_symbol", "000001") or "000001"
+            _last_tf = getattr(_settings.general, "last_timeframe", "1h") or "1h"
 
         # Data source
         from pa_agent.data.factory import DATA_SOURCE_CHOICES, normalize_data_source_kind
 
-        _last_ds = "mt5"
+        _last_ds = "eastmoney"
         if _settings is not None:
             _last_ds = normalize_data_source_kind(
-                getattr(_settings.general, "last_data_source", "mt5")
+                getattr(_settings.general, "last_data_source", "eastmoney")
             )
         self._active_data_source_kind = _last_ds
 
@@ -369,8 +383,8 @@ class MainWindow(QMainWindow):
             self._data_source_combo.setCurrentIndex(ds_index)
         self._data_source_combo.setMinimumWidth(108)
         self._data_source_combo.setToolTip(
-            "K 线数据来源：MT5（需终端登录）、TradingView（tvDatafeed）、"
-            "本地仅支持 MT5 与 TradingView"
+            "K 线数据来源：东方财富/AkShare/Tushare 用于 A 股；"
+            "TradingView 用于海外市场或备用；MT5 需本机终端已安装并登录"
         )
         self._data_source_combo.currentIndexChanged.connect(
             self._on_data_source_combo_changed
@@ -648,11 +662,83 @@ class MainWindow(QMainWindow):
             return
         bus.status.connect(self._on_status_update)
 
+    def _kline_cache_enabled(self) -> bool:
+        settings = getattr(self._ctx, "settings", None)
+        if settings is None:
+            return True
+        return bool(getattr(settings.general, "kline_cache_enabled", True))
+
+    def _kline_cache_max_bars(self) -> int:
+        settings = getattr(self._ctx, "settings", None)
+        if settings is None:
+            return 2000
+        return int(getattr(settings.general, "kline_cache_max_bars", 2000) or 2000)
+
+    def _current_cache_identity(self) -> tuple[str, str, str]:
+        return (
+            self._current_data_source_kind(),
+            self._symbol_combo.currentText().strip(),
+            self._tf_combo.currentText(),
+        )
+
+    def _load_cached_kline_frame(self) -> None:
+        """Render the last cached bars while live data is still connecting."""
+        if not self._kline_cache_enabled():
+            return
+        try:
+            from pa_agent.data.kline_cache import KlineCacheStore
+
+            source, symbol, timeframe = self._current_cache_identity()
+            entry = KlineCacheStore().read(source, symbol, timeframe)
+            if entry is None or not entry.bars:
+                return
+            self._last_frame_ready_bars = list(entry.bars)
+            frame = self._build_chart_frame_from_bars(
+                entry.bars,
+                include_forming=False,
+            )
+            if frame is None:
+                return
+            self._chart_widget.set_frame_now(frame, fit_view=False)
+            self._status_bar.showMessage(
+                f"已加载本地缓存：{symbol} {timeframe}，等待数据源刷新"
+            )
+            self._refresh_incremental_label()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Load kline cache failed: %s", exc)
+
+    def _save_kline_cache_from_bars(self, bars: Any) -> None:
+        if not bars or not self._kline_cache_enabled():
+            return
+        try:
+            from pa_agent.data.kline_cache import KlineCacheStore, merge_bars_newest_first
+
+            source, symbol, timeframe = self._current_cache_identity()
+            store = KlineCacheStore()
+            cached = store.read(source, symbol, timeframe)
+            cached_bars = cached.bars if cached is not None else ()
+            merged = merge_bars_newest_first(
+                cached_bars,
+                list(bars),
+                max_bars=self._kline_cache_max_bars(),
+            )
+            store.write(
+                source,
+                symbol,
+                timeframe,
+                merged,
+                max_bars=self._kline_cache_max_bars(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Save kline cache failed: %s", exc)
+
     def _start_refresh_loop(self) -> None:
         """Start the RefreshLoop only when the data source is connected."""
         # Reap any zombie workers / loops before starting a fresh one
         self._reap_zombie_workers()
         self._reap_zombie_loops()
+
+        self._load_cached_kline_frame()
 
         data_source = getattr(self._ctx, "data_source", None)
         if data_source is None:
@@ -921,7 +1007,7 @@ class MainWindow(QMainWindow):
         combo.blockSignals(False)
 
     def _apply_gold_defaults_for_data_source(self, kind: str) -> None:
-        """Reset symbol/exchange to defaults when switching data source."""
+        """Reset symbol/timeframe to the appropriate market defaults."""
         from pa_agent.data.market_defaults import (
             A_SHARE_DEFAULT_TIMEFRAME,
             normalize_gold_symbol_for_kind,
@@ -933,7 +1019,7 @@ class MainWindow(QMainWindow):
         self._symbol_combo.blockSignals(True)
         self._symbol_combo.setCurrentText(sym)
         self._symbol_combo.blockSignals(False)
-        if kind == "akshare":
+        if kind in ("akshare", "eastmoney", "tushare"):
             if self._tf_combo.currentText() not in ("1h", "4h", "1d"):
                 self._tf_combo.setCurrentText(A_SHARE_DEFAULT_TIMEFRAME)
 
@@ -1622,6 +1708,7 @@ class MainWindow(QMainWindow):
         """
         if bars:
             self._last_frame_ready_bars = list(bars)
+            self._save_kline_cache_from_bars(bars)
             from pa_agent.data.bar_close_wait import current_forming_ts
 
             ts = current_forming_ts(
@@ -3941,6 +4028,57 @@ class MainWindow(QMainWindow):
             self._ctx.settings = settings
             self._ai_sidebar.bind_settings(settings)
             self._apply_chart_display_settings()
+
+    def _open_analysis_history_dialog(self) -> None:
+        """Open a read-only timeline of saved analysis records."""
+        try:
+            from pa_agent.gui.analysis_history_dialog import AnalysisHistoryDialog
+            from pa_agent.records.analysis_summary import read_analysis_summaries
+
+            settings = getattr(self._ctx, "settings", None)
+            limit = 200
+            if settings is not None:
+                limit = int(
+                    getattr(settings.general, "analysis_history_max_rows", 200) or 200
+                )
+
+            def _load() -> list[Any]:
+                return read_analysis_summaries(limit=limit)
+
+            dialog = AnalysisHistoryDialog(_load(), refresh=_load, parent=self)
+            dialog.exec()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Open analysis history failed: %s", exc, exc_info=True)
+            self._status_bar.showMessage(f"分析历史打开失败：{exc}")
+
+    def _on_rebuild_setup_stats(self) -> None:
+        """Rebuild config/setup_stats.json from saved analysis records."""
+        try:
+            from pa_agent.backtest.record_replay import (
+                format_record_replay_summary,
+                rebuild_setup_stats_from_records,
+            )
+
+            summary = rebuild_setup_stats_from_records()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Rebuild setup stats failed: %s", exc)
+            QMessageBox.warning(
+                self,
+                "生成回测统计失败",
+                f"无法生成 setup_stats.json：\n{exc}",
+            )
+            return
+
+        msg = format_record_replay_summary(summary)
+        if summary.completed_trades == 0:
+            msg += "\n\n提示：没有完成的历史交易样本。需要同品种同周期的多条连续分析记录，且 Stage2 有有效三价，才能回测出胜负。"
+        QMessageBox.information(self, "生成回测统计", msg)
+        status_bar = getattr(self, "_status_bar", None)
+        if status_bar is not None:
+            status_bar.showMessage(
+                f"回测统计已生成：{summary.completed_trades} 笔完成交易，"
+                f"{summary.setup_buckets} 个 setup 桶"
+            )
 
     def _apply_chart_display_settings(self) -> None:
         """Sync chart label font sizes from persisted general settings."""

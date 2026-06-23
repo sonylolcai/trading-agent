@@ -350,6 +350,17 @@ _DECISION_BASE: dict = {
         "trade_confidence_reasoning": {"type": "string"},
         "estimated_win_rate": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
         "estimated_win_rate_reasoning": {"type": ["string", "null"]},
+        "estimated_win_rate_basis": {
+            "type": ["string", "null"],
+            "enum": ["historical", "hybrid", "llm_judgment", None],
+        },
+        "historical_win_rate_for_this_setup": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100,
+        },
+        "historical_sample_count": {"type": ["integer", "null"], "minimum": 0},
+        "historical_expectancy_r": {"type": ["number", "null"]},
         "key_factors": {"type": "array", "items": {"type": "string"}},
         "watch_points": {"type": "array", "items": {"type": "string"}},
         "risk_assessment": {"type": "string"},

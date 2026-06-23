@@ -126,6 +126,7 @@ _NO_ORDER_PRICE_FIELDS = (
     "entry_basis_extreme",
     "entry_rule",
 )
+_WIN_RATE_BASIS_VALUES = frozenset({"historical", "hybrid", "llm_judgment"})
 
 # Valid enum values for features_used in next_bar_prediction / next_cycle_prediction.
 # Must stay in sync with schemas.py _NEXT_BAR_PREDICTION / _NEXT_CYCLE_PREDICTION.
@@ -476,6 +477,62 @@ def _ensure_decision_required_fields(
             "proceed": "继续评估",
         }.get(outcome, "阶段二终局")
         changed = True
+    return changed
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return max(0, int(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_historical_win_rate_fields(decision: dict[str, Any]) -> bool:
+    """Normalize optional historical setup statistics in decision."""
+    changed = False
+    basis = decision.get("estimated_win_rate_basis")
+    if basis is not None:
+        normalized = str(basis or "").strip()
+        if normalized not in _WIN_RATE_BASIS_VALUES:
+            normalized = "llm_judgment"
+        if normalized != basis:
+            decision["estimated_win_rate_basis"] = normalized
+            changed = True
+    elif decision.get("order_type") in _TRADE_ORDER_TYPES:
+        decision["estimated_win_rate_basis"] = "llm_judgment"
+        changed = True
+
+    if "historical_win_rate_for_this_setup" in decision:
+        win_rate = _coerce_optional_float(decision.get("historical_win_rate_for_this_setup"))
+        if win_rate is not None:
+            win_rate = max(0.0, min(100.0, win_rate))
+        if decision.get("historical_win_rate_for_this_setup") != win_rate:
+            decision["historical_win_rate_for_this_setup"] = win_rate
+            changed = True
+
+    if "historical_sample_count" in decision:
+        sample_count = _coerce_optional_int(decision.get("historical_sample_count"))
+        if decision.get("historical_sample_count") != sample_count:
+            decision["historical_sample_count"] = sample_count
+            changed = True
+
+    if "historical_expectancy_r" in decision:
+        expectancy = _coerce_optional_float(decision.get("historical_expectancy_r"))
+        if decision.get("historical_expectancy_r") != expectancy:
+            decision["historical_expectancy_r"] = expectancy
+            changed = True
+
     return changed
 
 
@@ -1354,6 +1411,8 @@ def normalize_stage2(
 
     bar_analysis = out.get("bar_analysis")
     decision = out.get("decision")
+    if isinstance(decision, dict):
+        _normalize_historical_win_rate_fields(decision)
     if isinstance(bar_analysis, dict) and isinstance(decision, dict):
         _normalize_market_order_entry_bar(bar_analysis, decision)
         if _normalize_signal_entry_bar_chain(bar_analysis, decision):

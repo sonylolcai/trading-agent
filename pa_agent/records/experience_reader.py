@@ -20,7 +20,7 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from pa_agent.records.schema import ExperienceEntry
 
@@ -48,6 +48,71 @@ def _parse_timestamp_ms(filename: str) -> Optional[int]:
         return int(dt.timestamp() * 1000)
     except ValueError:
         return None
+
+
+def _norm_text(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
+def _extract_outcome(content: dict[str, Any]) -> dict[str, Any]:
+    """Return normalized outcome metadata from an experience JSON blob."""
+    outcome = content.get("outcome")
+    if outcome is None:
+        outcome = content.get("result")
+    if outcome is None:
+        outcome = content.get("trade_result")
+    label = ""
+    r_multiple: float | None = None
+    exit_reason = ""
+
+    if isinstance(outcome, dict):
+        label = str(
+            outcome.get("label")
+            or outcome.get("status")
+            or outcome.get("result")
+            or outcome.get("outcome")
+            or ""
+        ).strip()
+        exit_reason = str(outcome.get("exit_reason") or outcome.get("reason") or "").strip()
+        r_source = (
+            outcome.get("r_multiple")
+            if outcome.get("r_multiple") is not None
+            else outcome.get("profit_r")
+        )
+    else:
+        label = str(outcome or "").strip()
+        r_source = None
+
+    if r_source is None:
+        for key in ("r_multiple", "profit_r", "pnl_r", "profit_ratio"):
+            if content.get(key) is not None:
+                r_source = content.get(key)
+                break
+
+    try:
+        if r_source is not None:
+            r_multiple = float(r_source)
+    except (TypeError, ValueError):
+        r_multiple = None
+
+    label_norm = _norm_text(label)
+    has_outcome = bool(label_norm or exit_reason or r_multiple is not None)
+    if r_multiple is not None:
+        kind = "winner" if r_multiple > 0 else "loser" if r_multiple < 0 else "flat"
+    elif label_norm in {"win", "winner", "success", "profit", "tp", "take_profit"}:
+        kind = "winner"
+    elif label_norm in {"loss", "loser", "failure", "stop", "sl", "stop_loss"}:
+        kind = "loser"
+    else:
+        kind = "unknown"
+
+    return {
+        "has_outcome": has_outcome,
+        "kind": kind,
+        "label": label,
+        "r_multiple": r_multiple,
+        "exit_reason": exit_reason,
+    }
 
 
 class ExperienceReader:
@@ -98,8 +163,102 @@ class ExperienceReader:
             Up to 5 entries, newest first.  Returns an empty list when no
             readable entries are found.
         """
+        entries = self._read_all(cycle_position)
+        entries.sort(key=lambda e: e.timestamp_ms, reverse=True)
+        return entries[:5]
+
+    def read_for_stage2(
+        self,
+        cycle_position: str,
+        *,
+        direction: str = "",
+        patterns: list[str] | None = None,
+        max_entries: int = 3,
+        max_chars_per_entry: int = 400,
+        setup_key: str | None = None,
+        require_outcome: bool = True,
+        include_winners: bool = True,
+        include_losers: bool = True,
+    ) -> list[ExperienceEntry]:
+        """Return recent experience entries filtered for Stage 2 relevance."""
+        del max_chars_per_entry  # PromptAssembler owns text truncation.
+        entries = self._read_all(cycle_position)
+        if not entries:
+            return []
+
+        dir_norm = _norm_text(direction)
+        pattern_set = {
+            _norm_text(p) for p in (patterns or []) if str(p).strip()
+        }
+        setup_norm = _norm_text(setup_key)
+        ranked: list[tuple[int, ExperienceEntry, dict[str, Any]]] = []
+
+        for entry in entries:
+            content = entry.content if isinstance(entry.content, dict) else {}
+            outcome = _extract_outcome(content)
+            if require_outcome and not outcome["has_outcome"]:
+                continue
+            if outcome["kind"] == "winner" and not include_winners:
+                continue
+            if outcome["kind"] == "loser" and not include_losers:
+                continue
+            if outcome["kind"] == "unknown" and require_outcome:
+                continue
+
+            score = 0
+            ent_setup = _norm_text(content.get("setup_key") or content.get("setup"))
+            if setup_norm and ent_setup == setup_norm:
+                score += 8
+            ent_dir = _norm_text(content.get("direction"))
+            if dir_norm and ent_dir == dir_norm:
+                score += 3
+            ent_patterns = content.get("detected_patterns") or []
+            if not ent_patterns:
+                ent_patterns = content.get("patterns") or []
+            if pattern_set and isinstance(ent_patterns, list):
+                overlap = pattern_set.intersection(
+                    {_norm_text(p) for p in ent_patterns}
+                )
+                score += len(overlap)
+            if outcome["has_outcome"]:
+                score += 1
+            ranked.append((score, entry, outcome))
+
+        ranked.sort(key=lambda item: (item[0], item[1].timestamp_ms), reverse=True)
+        cap = max(0, min(max_entries, 10))
+        if cap == 0:
+            return []
+
+        if include_winners and include_losers:
+            winners = [item for item in ranked if item[2]["kind"] == "winner"]
+            losers = [item for item in ranked if item[2]["kind"] == "loser"]
+            balanced: list[ExperienceEntry] = []
+            wi = li = 0
+            while len(balanced) < cap and (wi < len(winners) or li < len(losers)):
+                if wi < len(winners):
+                    balanced.append(winners[wi][1])
+                    wi += 1
+                    if len(balanced) >= cap:
+                        break
+                if li < len(losers):
+                    balanced.append(losers[li][1])
+                    li += 1
+            if len(balanced) < cap:
+                used = {entry.filename for entry in balanced}
+                balanced.extend(
+                    entry for _, entry, _ in ranked if entry.filename not in used
+                )
+            return balanced[:cap]
+
+        return [entry for _, entry, _ in ranked[:cap]]
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _read_all(self, cycle_position: str) -> list[ExperienceEntry]:
         base_dir = self._experience_dir / cycle_position
-        candidates: list[tuple[int, str, Path]] = []  # (timestamp_ms, case_type, path)
+        candidates: list[tuple[int, str, Path]] = []
 
         for case_type, subdir_name in (("success", "success_cases"), ("failure", "failure_cases")):
             subdir = base_dir / subdir_name
@@ -110,12 +269,8 @@ class ExperienceReader:
                 continue
 
             for file_path in subdir.iterdir():
-                if not file_path.is_file():
+                if not file_path.is_file() or file_path.suffix.lower() != ".json":
                     continue
-                # Skip non-JSON files and hidden files like .gitkeep
-                if file_path.suffix.lower() != ".json":
-                    continue
-
                 ts_ms = _parse_timestamp_ms(file_path.name)
                 if ts_ms is None:
                     self._logger.warning(
@@ -123,69 +278,23 @@ class ExperienceReader:
                         file_path.name,
                     )
                     continue
-
                 candidates.append((ts_ms, case_type, file_path))
 
-        # Sort by timestamp descending (newest first), then take top 5.
-        candidates.sort(key=lambda t: t[0], reverse=True)
-        top5 = candidates[:5]
-
         entries: list[ExperienceEntry] = []
-        for ts_ms, case_type, file_path in top5:
+        for ts_ms, case_type, file_path in candidates:
             content = self._read_json(file_path)
             if content is None:
                 continue
-            entry = ExperienceEntry(
-                filename=file_path.name,
-                case_type=case_type,
-                cycle_position=cycle_position,
-                timestamp_ms=ts_ms,
-                content=content,
-            )
-            entries.append(entry)
-
-        return entries
-
-    def read_for_stage2(
-        self,
-        cycle_position: str,
-        *,
-        direction: str = "",
-        patterns: list[str] | None = None,
-        max_entries: int = 3,
-        max_chars_per_entry: int = 400,
-    ) -> list[ExperienceEntry]:
-        """Return recent experience entries filtered for Stage 2 relevance."""
-        entries = self.read_top5(cycle_position)
-        if not entries:
-            return []
-
-        dir_norm = str(direction or "").strip().lower()
-        pattern_set = {
-            str(p).strip().lower() for p in (patterns or []) if str(p).strip()
-        }
-
-        def _score(entry: ExperienceEntry) -> int:
-            content = entry.content if isinstance(entry.content, dict) else {}
-            score = 0
-            ent_dir = str(content.get("direction", "") or "").strip().lower()
-            if dir_norm and ent_dir == dir_norm:
-                score += 2
-            ent_patterns = content.get("detected_patterns") or []
-            if pattern_set and isinstance(ent_patterns, list):
-                overlap = pattern_set.intersection(
-                    {str(p).strip().lower() for p in ent_patterns}
+            entries.append(
+                ExperienceEntry(
+                    filename=file_path.name,
+                    case_type=case_type,
+                    cycle_position=cycle_position,
+                    timestamp_ms=ts_ms,
+                    content=content,
                 )
-                score += len(overlap)
-            return score
-
-        ranked = sorted(entries, key=lambda e: (_score(e), e.timestamp_ms), reverse=True)
-        cap = max(0, min(max_entries, 10))
-        return ranked[:cap]
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+            )
+        return entries
 
     def _read_json(self, path: Path) -> Optional[dict]:
         """Read and parse a JSON file.

@@ -62,13 +62,18 @@ class GeneralSettings(BaseModel):
     analysis_bar_count: int = Field(default=100, ge=2, le=5000)
     refresh_interval_ms: int = 1000
     context_warning_threshold_pct: float = 80.0
-    last_data_source: DataSourceKind = "mt5"
+    last_data_source: DataSourceKind = "eastmoney"
+    #: Persist fetched K-lines locally so charts can recover after restart.
+    kline_cache_enabled: bool = True
+    kline_cache_max_bars: int = Field(default=2000, ge=10, le=200000)
+    #: Max rows shown in the analysis history dialog.
+    analysis_history_max_rows: int = Field(default=200, ge=1, le=10000)
     #: A-share K-line adjust for East Money / Baostock (qfq=前复权)
     kline_adjust: Literal["qfq", "hfq", "none"] = "qfq"
     #: TradingView 交易所；空字符串 =（自动）依次探测预设列表
     last_tradingview_exchange: str = ""
-    last_symbol: str = "XAUUSDm"
-    last_timeframe: str = "15m"
+    last_symbol: str = "000001"
+    last_timeframe: str = "1h"
     decision_flow_auto_play: bool = True
     decision_flow_play_seconds: int = 50
     #: 阶段二给出限价/突破/市价单时：警报音、弹窗，并自动切到「决策」页（跳过决策树可视化演示）
@@ -92,6 +97,13 @@ class GeneralSettings(BaseModel):
     decision_confidence_threshold: int = Field(default=40, ge=0, le=100)
     #: 开启下根K线预期功能；关闭时不向模型请求该预测，节省 token
     enable_next_bar_prediction: bool = False
+    #: Paper trading gate before live signal mode can be considered unlocked.
+    paper_trading_required: bool = True
+    paper_trading_min_trades: int = Field(default=50, ge=0, le=10000)
+    paper_trading_min_win_rate: float = Field(default=40.0, ge=0.0, le=100.0)
+    paper_trading_min_expectancy_r: float = Field(default=0.0, ge=-10.0, le=10.0)
+    paper_trading_reset_on_symbol_change: bool = True
+    paper_trading_symbol_min_trades: int = Field(default=20, ge=0, le=10000)
 
     @field_validator("last_data_source", mode="before")
     @classmethod

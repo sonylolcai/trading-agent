@@ -339,6 +339,10 @@ JSON 字符串内不要用英文双引号强调，改用「」或不用引号。
     "trade_confidence_reasoning": "",
     "estimated_win_rate": 50,
     "estimated_win_rate_reasoning": "",
+    "estimated_win_rate_basis": "llm_judgment",
+    "historical_win_rate_for_this_setup": null,
+    "historical_sample_count": 0,
+    "historical_expectancy_r": null,
     "key_factors": [],
     "watch_points": [],
     "risk_assessment": "",
@@ -577,6 +581,7 @@ trade_confidence_reasoning：必须简要说明打分依据（如“入场信号
 - **必须在 §10.3 交易者方程评估完成后**由你自行判断并填写；须与 10.3 节点 reason 中的胜率假设一致
 - order_type=「不下单」时：estimated_win_rate 填 **null**，estimated_win_rate_reasoning 填 **null**（无交易方案，无胜率可估）
 - 有下单时：estimated_win_rate 为 **必填整数**（不要填区间字符串，取你判断的最可能值，如 47）
+- 有历史 setup 统计时，必须同时填写 `estimated_win_rate_basis`、`historical_win_rate_for_this_setup`、`historical_sample_count`、`historical_expectancy_r`；样本充足用 historical，样本不足但可参考用 hybrid，无样本用 llm_judgment
 estimated_win_rate_reasoning：必须简要说明依据（如“宽通道顺势 Low1，结构支持约 45–50%，取 47% 用于方程”）
 """.strip()
 
@@ -1405,6 +1410,7 @@ class PromptAssembler:
         experience_entries: list[Any],
         *,
         decision_stance: str = "conservative",
+        historical_stats: dict[str, Any] | None = None,
     ) -> list[dict]:
         """Build a standalone Stage 2 request (kept for tests/tools)."""
         system_content = self._build_stage2_system_prompt()
@@ -1414,6 +1420,7 @@ class PromptAssembler:
             strategy_files=strategy_files,
             experience_entries=experience_entries,
             decision_stance=decision_stance,
+            historical_stats=historical_stats,
         )
         return [
             {"role": "system", "content": system_content},
@@ -1466,6 +1473,7 @@ class PromptAssembler:
         decision_stance: str = "conservative",
         previous_record: Any | None = None,
         enable_next_bar_prediction: bool = True,
+        historical_stats: dict[str, Any] | None = None,
     ) -> list[dict]:
         """Build Stage 2 as a standalone API turn (decoupled from Stage 1 chat).
 
@@ -1487,6 +1495,7 @@ class PromptAssembler:
             decision_stance=decision_stance,
             previous_record=previous_record,
             enable_next_bar_prediction=enable_next_bar_prediction,
+            historical_stats=historical_stats,
         )
 
         return [
@@ -1504,6 +1513,7 @@ class PromptAssembler:
         decision_stance: str = "conservative",
         previous_record: Any | None = None,
         enable_next_bar_prediction: bool = True,
+        historical_stats: dict[str, Any] | None = None,
     ) -> str:
         """Build the Stage 2 task turn for standalone or continuation mode."""
         stance_block = build_decision_stance_guidance(normalize_stance(decision_stance))
@@ -1540,6 +1550,8 @@ class PromptAssembler:
                     max_chars_per_entry=max_chars,
                 )
             )
+        if historical_stats:
+            stage2_parts.append(self._render_historical_stats(historical_stats))
         stage2_parts.append(_STAGE2_OUTPUT_CONTRACT)
         if enable_next_bar_prediction:
             stage2_parts.append(_NEXT_BAR_PREDICTION_INSTRUCTION)
@@ -1781,6 +1793,82 @@ class PromptAssembler:
         return "\n".join(lines) + "\n"
 
     @staticmethod
+    def _render_historical_stats(stats: dict[str, Any]) -> str:
+        """Render setup-level historical statistics for Stage 2."""
+        sample_count = stats.get("historical_sample_count", stats.get("sample_count", 0))
+        win_rate = stats.get(
+            "historical_win_rate_for_this_setup",
+            stats.get("win_rate_pct", stats.get("win_rate")),
+        )
+        expectancy = stats.get("historical_expectancy_r", stats.get("expectancy_r"))
+        basis = stats.get("estimated_win_rate_basis", stats.get("basis", "llm_judgment"))
+        return (
+            "## 历史 setup 统计（程序回测/模拟盘汇总）\n"
+            "这些字段用于约束 decision.estimated_win_rate，不得无来源拍脑袋。\n\n"
+            "```json\n"
+            + json.dumps(
+                {
+                    "estimated_win_rate_basis": basis,
+                    "historical_win_rate_for_this_setup": win_rate,
+                    "historical_sample_count": sample_count,
+                    "historical_expectancy_r": expectancy,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n```\n"
+            "- historical_sample_count 足够时，优先用 historical；样本不足但存在时用 hybrid；"
+            "没有样本时用 llm_judgment 并说明依据。\n"
+        )
+
+    @staticmethod
+    def _experience_content(entry: Any) -> dict[str, Any] | None:
+        if isinstance(entry, dict):
+            return entry
+        content = getattr(entry, "content", None)
+        return content if isinstance(content, dict) else None
+
+    @staticmethod
+    def _experience_outcome_label(content: dict[str, Any]) -> str:
+        outcome = content.get("outcome") or content.get("result") or content.get("trade_result")
+        label = ""
+        exit_reason = ""
+        r_value: float | None = None
+        if isinstance(outcome, dict):
+            label = str(
+                outcome.get("label")
+                or outcome.get("status")
+                or outcome.get("result")
+                or outcome.get("outcome")
+                or ""
+            ).strip()
+            exit_reason = str(outcome.get("exit_reason") or outcome.get("reason") or "").strip()
+            raw_r = outcome.get("r_multiple")
+            if raw_r is None:
+                raw_r = outcome.get("profit_r")
+        else:
+            label = str(outcome or "").strip()
+            raw_r = None
+        if raw_r is None:
+            for key in ("r_multiple", "profit_r", "pnl_r", "profit_ratio"):
+                if content.get(key) is not None:
+                    raw_r = content.get(key)
+                    break
+        try:
+            if raw_r is not None:
+                r_value = float(raw_r)
+        except (TypeError, ValueError):
+            r_value = None
+        parts = []
+        if r_value is not None:
+            parts.append(f"{r_value:+.2f}R")
+        if label:
+            parts.append(label)
+        if exit_reason:
+            parts.append(exit_reason)
+        return " | ".join(parts)
+
+    @staticmethod
     def _render_experience(
         entries: list[Any],
         *,
@@ -1792,17 +1880,16 @@ class PromptAssembler:
             "以下案例仅作对照，**不得**因相似就改变对本图结构/方向的独立判断。",
         ]
         for i, entry in enumerate(entries, 1):
-            if isinstance(entry, dict):
-                blob = json.dumps(entry, ensure_ascii=False, indent=2)
-            elif hasattr(entry, "content"):
-                blob = json.dumps(
-                    getattr(entry, "content", entry),
-                    ensure_ascii=False,
-                    indent=2,
-                )
+            content = PromptAssembler._experience_content(entry)
+            outcome_line = ""
+            if content is not None:
+                outcome = PromptAssembler._experience_outcome_label(content)
+                if outcome:
+                    outcome_line = f"\n结果: {outcome}"
+                blob = json.dumps(content, ensure_ascii=False, indent=2)
             else:
                 blob = str(entry)
             if len(blob) > max_chars_per_entry:
                 blob = blob[: max_chars_per_entry - 3] + "..."
-            lines.append(f"\n### 案例 {i}\n```json\n{blob}\n```")
+            lines.append(f"\n### 案例 {i}{outcome_line}\n```json\n{blob}\n```")
         return "\n".join(lines)
