@@ -20,6 +20,15 @@ SECRET_KEYS = {
 }
 
 
+def _mask_api_secret(value: object) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if len(text) <= 4:
+        return "***"
+    return mask_secret(text)
+
+
 def _json_float(value: float) -> float | None:
     if math.isnan(value) or math.isinf(value):
         return None
@@ -33,7 +42,7 @@ def _mask_mapping(value: Any) -> Any:
             if key == "api_key_encrypted":
                 continue
             if key in SECRET_KEYS:
-                masked[key] = mask_secret(str(child or ""))
+                masked[key] = _mask_api_secret(child)
             else:
                 masked[key] = _mask_mapping(child)
         return masked
@@ -51,14 +60,14 @@ def bar_to_payload(bar: KlineBar) -> dict[str, Any]:
     """Return a JSON-safe representation of one K-line bar."""
     return {
         "seq": bar.seq,
-        "ts_open": bar.ts_open,
-        "open": bar.open,
-        "high": bar.high,
-        "low": bar.low,
-        "close": bar.close,
-        "volume": bar.volume,
-        "amount": bar.amount,
-        "pct_chg": bar.pct_chg,
+        "ts_open": _json_float(bar.ts_open),
+        "open": _json_float(bar.open),
+        "high": _json_float(bar.high),
+        "low": _json_float(bar.low),
+        "close": _json_float(bar.close),
+        "volume": _json_float(bar.volume),
+        "amount": _json_float(bar.amount),
+        "pct_chg": None if bar.pct_chg is None else _json_float(bar.pct_chg),
         "closed": bar.closed,
     }
 
@@ -85,7 +94,6 @@ def record_summary_to_payload(path: Path, record: AnalysisRecord) -> dict[str, A
     direction = decision.get("direction") or ""
     return {
         "id": path.stem,
-        "path": str(path),
         "timestamp_local_iso": record.meta.timestamp_local_iso,
         "timestamp_local_ms": record.meta.timestamp_local_ms,
         "symbol": record.meta.symbol,

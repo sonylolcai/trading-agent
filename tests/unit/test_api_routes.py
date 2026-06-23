@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from pa_agent.api import app as api_app_module
 from pa_agent.api.app import create_app
 from pa_agent.api.context import ApiContext
 from pa_agent.config.settings import Settings
@@ -50,6 +51,10 @@ def test_settings_route_masks_api_key(tmp_path: Path) -> None:
     assert response.json()["provider"]["api_key"] == mask_secret("sk-test-secret")
 
 
+def test_app_module_does_not_construct_production_app_on_import() -> None:
+    assert not hasattr(api_app_module, "app")
+
+
 def test_data_sources_route_lists_default_sources(tmp_path: Path) -> None:
     client = TestClient(create_app(_context(tmp_path)))
 
@@ -82,6 +87,23 @@ def test_market_snapshot_reads_cache_and_keeps_newest_first(tmp_path: Path) -> N
     assert [bar["close"] for bar in payload["frame"]["bars"]] == [13, 12]
 
 
+def test_market_snapshot_clamps_requested_bars_to_cached_closed_bars(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    context.kline_cache.write(
+        "eastmoney",
+        "000001",
+        "1h",
+        _recent_hourly_bars(),
+        max_bars=20,
+    )
+    client = TestClient(create_app(context))
+
+    response = client.get("/api/market/snapshot?bars=100&include_forming=false")
+
+    assert response.status_code == 200
+    assert [bar["seq"] for bar in response.json()["frame"]["bars"]] == [1, 2]
+
+
 def test_market_snapshot_can_include_forming_bar_for_display(tmp_path: Path) -> None:
     context = _context(tmp_path)
     context.kline_cache.write(
@@ -107,3 +129,11 @@ def test_records_route_returns_empty_list_when_no_records(tmp_path: Path) -> Non
 
     assert response.status_code == 200
     assert response.json() == {"items": []}
+
+
+def test_records_route_rejects_negative_limit(tmp_path: Path) -> None:
+    client = TestClient(create_app(_context(tmp_path)))
+
+    response = client.get("/api/records?limit=-1")
+
+    assert response.status_code == 422

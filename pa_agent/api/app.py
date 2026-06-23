@@ -24,6 +24,3 @@ def create_app(context: ApiContext | None = None) -> FastAPI:
     app.include_router(market_router)
     app.include_router(records_router)
     return app
-
-
-app = create_app()

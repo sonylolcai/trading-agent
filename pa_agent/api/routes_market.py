@@ -11,6 +11,7 @@ from pa_agent.data.factory import (
     default_symbol_for_kind,
     normalize_data_source_kind,
 )
+from pa_agent.data.bar_close_wait import has_forming_bar_at_head
 from pa_agent.data.snapshot import build_analysis_frame, build_live_frame
 
 router = APIRouter(prefix="/api", tags=["market"])
@@ -80,10 +81,20 @@ def read_market_snapshot(
         )
 
     raw_bars = list(entry.bars)
+    has_forming = has_forming_bar_at_head(
+        raw_bars,
+        entry.timeframe,
+        symbol=entry.symbol,
+    )
+    available_closed = len(raw_bars) - (1 if has_forming else 0)
+    closed_count = min(bars, available_closed)
+    if closed_count < 1:
+        raise HTTPException(status_code=422, detail="Not enough bars to build snapshot")
+
     if include_forming:
-        frame = build_live_frame(raw_bars, bars, entry.symbol, entry.timeframe)
+        frame = build_live_frame(raw_bars, closed_count, entry.symbol, entry.timeframe)
     else:
-        frame = build_analysis_frame(raw_bars, bars, entry.symbol, entry.timeframe)
+        frame = build_analysis_frame(raw_bars, closed_count, entry.symbol, entry.timeframe)
     if frame is None:
         raise HTTPException(status_code=422, detail="Not enough bars to build snapshot")
     return {

@@ -1,7 +1,7 @@
 """Analysis record routes for the local Web API."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 
 from pa_agent.api.context import ApiContext
 from pa_agent.api.dto import record_summary_to_payload
@@ -15,7 +15,10 @@ def _ctx(request: Request) -> ApiContext:
 
 
 @router.get("/records")
-def list_records(request: Request, limit: int = 200) -> dict[str, list[dict]]:
+def list_records(
+    request: Request,
+    limit: int = Query(default=200, ge=0, le=1000),
+) -> dict[str, list[dict]]:
     ctx = _ctx(request)
     items: list[dict] = []
     for path in list_record_paths(ctx.records_dir)[:limit]:
