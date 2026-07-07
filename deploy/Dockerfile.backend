@@ -1,0 +1,29 @@
+# PA Agent Backend Dockerfile
+# FastAPI server on port 8000
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system deps needed by akshare / baostock / curl_cffi
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency list and install
+COPY deploy/requirements-server.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements-server.txt
+
+# Copy the entire project (excluding GUI deps are handled by requirements-server.txt)
+COPY . .
+
+# Ensure runtime directories exist
+RUN mkdir -p config logs records/pending cache/kline trade_records
+
+# Create default settings.json if not present (will be generated at runtime anyway)
+RUN python -c "from pa_agent.config.settings import load_settings; load_settings()" || true
+
+EXPOSE 8000
+
+CMD ["uvicorn", "pa_agent.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
