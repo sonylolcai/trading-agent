@@ -18,7 +18,7 @@ class AIProviderSettings(BaseModel):
     api_key: str = ""
     api_key_encrypted: str = ""
     thinking: bool = True
-    reasoning_effort: Literal["low", "medium", "high", "max"] = "max"
+    reasoning_effort: Literal["low", "medium", "high", "max"] = "high"
     context_window: int = 2_000_000
 
 
@@ -28,7 +28,7 @@ class PromptSettings(BaseModel):
 
     #: When True, Stage 2 loads every strategy .txt (legacy/test behaviour).
     stage2_load_full_strategy_library: bool = False
-    experience_max_entries: int = Field(default=3, ge=0, le=10)
+    experience_max_entries: int = Field(default=0, ge=0, le=10)
     experience_max_chars_per_entry: int = Field(default=400, ge=100, le=4000)
     #: Inject pattern判定表 + 速查 brief into Stage 1 user prompt (reduces missed tags).
     stage1_inject_pattern_briefs: bool = True
@@ -82,11 +82,11 @@ class GeneralSettings(BaseModel):
     #: 简单模式风险档位：balanced=默认；conservative/aggressive 逐级调整下单意愿
     decision_stance: DecisionStance = "balanced"
     #: 决策树可视化：在「整图适配」基础上的缩放百分比（100=与适配一致；可任意放大，仅下限 10%）
-    decision_flow_default_zoom_pct: int = Field(default=500, ge=10)
+    decision_flow_default_zoom_pct: int = Field(default=600, ge=10)
     #: 「实时」页思考过程/撰写回答框与追问输入框的等宽字体字号（pt）
     stream_pane_font_pt: int = Field(default=11, ge=8, le=28)
     #: K 线图上 #序号 标签的字号（pt）
-    chart_seq_label_font_pt: int = Field(default=7, ge=6, le=24)
+    chart_seq_label_font_pt: int = Field(default=11, ge=6, le=24)
     #: 两阶段分析结束后是否自动恢复 K 线图表实时刷新
     auto_resume_chart_after_analysis: bool = False
     #: 持续跟踪分析：有新K线收盘时自动触发新一轮分析
@@ -104,6 +104,8 @@ class GeneralSettings(BaseModel):
     paper_trading_min_expectancy_r: float = Field(default=0.0, ge=-10.0, le=10.0)
     paper_trading_reset_on_symbol_change: bool = True
     paper_trading_symbol_min_trades: int = Field(default=20, ge=0, le=10000)
+    #: 同一结构位 entry 相差≤3跳时，禁止反向新方案的冷却 K 线根数（已收盘）
+    structure_flip_cooldown_bars: int = Field(default=3, ge=1, le=50)
 
     @field_validator("last_data_source", mode="before")
     @classmethod
@@ -160,7 +162,7 @@ class PushPlusSettings(BaseModel):
     """PushPlus notification settings (settings.json only; no GUI)."""
     model_config = ConfigDict(extra="ignore")
 
-    enabled: bool = True
+    enabled: bool = False
     token: str = ""
 
 
@@ -187,6 +189,7 @@ def provider_api_key_configured(settings: Settings | None) -> bool:
 # ── Persistence ───────────────────────────────────────────────────────────────
 import json
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -263,7 +266,16 @@ def load_settings(path: Path | None = None) -> "Settings":
 
     migrated_feishu = _migrate_legacy_feishu_json(raw, path)
     settings = Settings.model_validate(raw)
-    if migrated_feishu:
+    dirty = migrated_feishu
+    if settings.pushplus.enabled and not settings.pushplus.token.strip():
+        if not (os.environ.get("PUSHPLUS_TOKEN") or "").strip():
+            settings.pushplus.enabled = False
+            logger.info(
+                "PushPlus enabled but token empty — auto-disabled "
+                "(Feishu notifications unaffected)"
+            )
+            dirty = True
+    if dirty:
         save_settings(settings, path)
     return settings
 

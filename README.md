@@ -1,6 +1,6 @@
 # IQ — AI K线分析辅助工具
 
-**交流 QQ 群：871156180**
+**交流 QQ 群：1016222782**
 
 ---
 
@@ -148,6 +148,70 @@ Web 前端运行在 `http://127.0.0.1:3000`，通过环境变量 `NEXT_PUBLIC_PA
 **免责声明**：本工具仅供学习与研究，不构成投资建议。交易有风险，决策后果自负。
 
 本项目采用 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 发布。
+
+---
+
+## 群友反馈榜单
+
+感谢群友的使用反馈与鼓励，以下为群友评价截图（按时间从早到晚排列）：
+
+<p align="center">
+  <img src="qunyou/BD58CB2D6E4F45CC17CF832C506A982C.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/653EC872A0D6883A34B7B37B692C8B1D.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260619-205140.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260619-235505.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260620-150714.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260620-150833.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260620-220824.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260623-125929.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/91003065F07407E92B50964AE7F8A944.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260624-191001.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260628-014043.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260628-213700.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260629-163821.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ20260701-212522.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/BB4AE8110A7011426BD29D5CE8B5F73B.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/F383D366F2254692418DB18AAA617ACE.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/AD48DF6289CB6A9D51FE0B8EE2EC38C2.jpg" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/F61C8DCDB67924B64B33403D20047E0B.png" alt="群友反馈" width="480" />
+</p>
+<p align="center">
+  <img src="qunyou/QQ_1783089951396.png" alt="群友反馈" width="480" />
+</p>
 
 ---
 

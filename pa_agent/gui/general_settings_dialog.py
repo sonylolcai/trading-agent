@@ -243,7 +243,7 @@ class GeneralSettingsDialog(QDialog):
         )
         self._context_warning_spin.setValue(int(g.context_warning_threshold_pct))
         self._stream_font_spin.setValue(int(getattr(g, "stream_pane_font_pt", 11)))
-        self._chart_seq_font_spin.setValue(int(getattr(g, "chart_seq_label_font_pt", 7)))
+        self._chart_seq_font_spin.setValue(int(getattr(g, "chart_seq_label_font_pt", 11)))
 
         self._flow_auto_play_check.setChecked(
             getattr(g, "decision_flow_auto_play", False)
@@ -252,7 +252,7 @@ class GeneralSettingsDialog(QDialog):
             getattr(g, "decision_flow_play_seconds", 50)
         )
         self._flow_default_zoom_spin.setValue(
-            int(getattr(g, "decision_flow_default_zoom_pct", 500))
+            int(getattr(g, "decision_flow_default_zoom_pct", 600))
         )
 
     def _on_save(self) -> None:
