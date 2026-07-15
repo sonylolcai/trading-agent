@@ -14,7 +14,8 @@ COPY apps/web/ ./
 RUN mkdir -p public
 
 # Build with API base URL empty (relative paths — proxied through nginx)
-ENV NEXT_PUBLIC_PA_API_BASE_URL=""
+ENV NEXT_PUBLIC_PA_API_BASE_URL="/pa-agent-api"
+ENV NEXT_PUBLIC_PA_ASSET_PREFIX="/pa-agent-assets"
 RUN npm run build
 
 # ── Production image ──
