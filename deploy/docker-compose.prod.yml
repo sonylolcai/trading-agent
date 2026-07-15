@@ -1,3 +1,4 @@
+name: pa-agent
 version: "3.8"
 
 services:
