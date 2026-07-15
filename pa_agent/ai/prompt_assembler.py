@@ -65,7 +65,7 @@ _PA_TERMINOLOGY_ZH = """
 _STAGE2_API_TASK_RULE = """
 ## 阶段二 API 任务模式（硬约束，非聊天）
 
-本次调用是 PA Agent **阶段二的一次独立 API 请求**。提示中虽含阶段一诊断 JSON，**不代表**阶段二已完成或可以收尾对话。
+本次调用是 IQ **阶段二的一次独立 API 请求**。提示中虽含阶段一诊断 JSON，**不代表**阶段二已完成或可以收尾对话。
 
 **禁止**输出：
 - 「阶段一和阶段二都已输出完毕」「分析已完成」等会话总结
@@ -76,9 +76,9 @@ _STAGE2_API_TASK_RULE = """
 """.strip()
 
 _OPENCLAW_AGENT_NO_TOOLS_RULE = """
-## PA Agent × QClaw 任务模式（硬约束）
+## IQ × QClaw 任务模式（硬约束）
 
-你正在接收 **PA Agent 程序化 K 线分析**请求，不是通用编程/运维助手会话。
+你正在接收 **IQ 程序化 K 线分析**请求，不是通用编程/运维助手会话。
 
 **禁止调用任何工具**，包括但不限于：`exec`、运行 Python/shell、读/写/编辑文件、浏览器、联网搜索、在 `~/.qclaw/workspace` 写中间 `.md`/`.json` 等。
 

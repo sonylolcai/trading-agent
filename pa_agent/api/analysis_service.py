@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
+from pa_agent.api.analysis_stream import StructuredContentBuffer
 from pa_agent.api.events import normalize_event, sse_message
 from pa_agent.data.base import KlineFrame
 from pa_agent.records.schema import AnalysisRecord
@@ -153,22 +154,19 @@ def default_analysis_runner(
         exp_reader=ctx.exp_reader,
         settings=ctx.settings,
     )
-    return orchestrator.submit(
+    content_buffer = StructuredContentBuffer()
+    record = orchestrator.submit(
         frame,
         cancel_token,
         emit,
         on_stage1_reasoning=lambda text: emit(
             {"type": "reasoning_delta", "stage": "stage1", "text": text}
         ),
-        on_stage1_content=lambda text: emit(
-            {"type": "content_delta", "stage": "stage1", "text": text}
-        ),
+        on_stage1_content=lambda text: content_buffer.add("stage1", text, emit),
         on_stage2_reasoning=lambda text: emit(
             {"type": "reasoning_delta", "stage": "stage2", "text": text}
         ),
-        on_stage2_content=lambda text: emit(
-            {"type": "content_delta", "stage": "stage2", "text": text}
-        ),
+        on_stage2_content=lambda text: content_buffer.add("stage2", text, emit),
         on_stage_prompt=lambda stage, system, user: emit(
             {
                 "type": "stage_prompt",
@@ -179,3 +177,5 @@ def default_analysis_runner(
         ),
         on_stage2_files=lambda files: emit({"type": "stage2_files", "files": files}),
     )
+    content_buffer.finish(emit)
+    return record

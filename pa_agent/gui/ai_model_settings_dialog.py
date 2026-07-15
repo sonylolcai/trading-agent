@@ -222,7 +222,7 @@ class AIModelSettingsDialog(QDialog):
             "如果你愿意付费，请联系QQ：564020069（付费后提供远程协助部署安装服务）<br><br>"
             "如果你不愿意付费，你可以用自己的模型api，如果你不知道模型api是什么<br>"
             "可以直接跟龙虾说：<br>"
-            "PA_Agent这个程序的模型api有什么作用，该怎么填？<br>"
+            "IQ这个程序的模型 API 有什么作用，该怎么填？<br>"
             "请教我填上Deepseek官方的模型API接口"
         )
         label.setStyleSheet("font-size: 22pt;")

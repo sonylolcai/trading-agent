@@ -1,6 +1,6 @@
 {
   "provider": {
-    "model": "deepseek-chat",
+    "model": "deepseek-v4-flash",
     "base_url": "https://api.deepseek.com",
     "api_key_encrypted": "",
     "thinking": true,
@@ -19,6 +19,7 @@
     "decision_flow_play_seconds": 50,
     "incremental_max_new_bars": 10,
     "decision_stance": "balanced",
+    "decision_confidence_threshold": 40,
     "decision_flow_default_zoom_pct": 500,
     "stream_pane_font_pt": 11,
     "chart_seq_label_font_pt": 7,

@@ -5,7 +5,10 @@ import type {
   DataSourcesResponse,
   KlineCacheResponse,
   MarketSnapshotResponse,
+  MarketSelectionRequest,
   RecordsResponse,
+  RiskProfileRequest,
+  RollingBacktestResponse,
   SettingsPayload,
   SetupStatsResponse,
   TimeframesResponse,
@@ -40,16 +43,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
 
     return { ok: true, data: (await response.json()) as T };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to reach PA Agent API';
+    const message = error instanceof Error ? error.message : 'Unable to reach IQ API';
     return { ok: false, error: message };
   }
 }
 
+function queryString(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') {
+      search.set(key, String(value));
+    }
+  });
+  const value = search.toString();
+  return value ? `?${value}` : '';
+}
+
 export const api = {
   settings: () => request<SettingsPayload>('/api/settings'),
+  updateMarketSelection: (payload: MarketSelectionRequest) =>
+    request<SettingsPayload>('/api/settings/market', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  updateRiskProfile: (payload: RiskProfileRequest) =>
+    request<SettingsPayload>('/api/settings/risk-profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   dataSources: () => request<DataSourcesResponse>('/api/data-sources'),
   timeframes: (source: string) => request<TimeframesResponse>(`/api/timeframes?source=${encodeURIComponent(source)}`),
   klineCache: () => request<KlineCacheResponse>('/api/kline-cache'),
+  fetchKlines: (payload: MarketSelectionRequest) =>
+    request<KlineCacheResponse>('/api/market/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
   snapshot: () => request<MarketSnapshotResponse>('/api/market/snapshot?bars=100&include_forming=false'),
   records: () => request<RecordsResponse>('/api/records'),
   startAnalysis: () => request<AnalysisStartResponse>('/api/analysis', { method: 'POST' }),
@@ -57,6 +89,15 @@ export const api = {
   cancelAnalysis: (id: string) => request<AnalysisStatusResponse>(`/api/analysis/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   rebuildSetupStats: () => request<BacktestRebuildResponse>('/api/backtest/rebuild-setup-stats', { method: 'POST' }),
   setupStats: () => request<SetupStatsResponse>('/api/backtest/setup-stats'),
+  rollingBacktestSummary: (payload?: MarketSelectionRequest & { window?: number }) =>
+    request<RollingBacktestResponse>(
+      `/api/backtest/rolling-summary${queryString({
+        source: payload?.source,
+        symbol: payload?.symbol,
+        timeframe: payload?.timeframe,
+        window: payload?.window,
+      })}`,
+    ),
 };
 
 export function analysisEventsUrl(id: string): string {

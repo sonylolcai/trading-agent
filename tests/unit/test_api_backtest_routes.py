@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from pa_agent.api.app import create_app
 from pa_agent.api.context import ApiContext
 from pa_agent.backtest.record_replay import RecordReplaySummary
 from pa_agent.config.settings import Settings
+from pa_agent.data.base import KlineBar
 from pa_agent.data.kline_cache import KlineCacheStore
 
 
@@ -20,6 +22,25 @@ def _context(tmp_path: Path, rebuild: object | None = None) -> ApiContext:
         setup_stats_path=tmp_path / "setup_stats.json",
         rebuild_setup_stats=rebuild or (lambda **_: None),
     )
+
+
+def _bar(index: int, close: float, *, seq: int = 1) -> KlineBar:
+    return KlineBar(
+        seq=seq,
+        ts_open=float(index * 60_000),
+        open=close - 0.4,
+        high=close + 0.2,
+        low=close - 0.9,
+        close=close,
+        volume=100.0,
+        amount=1000.0,
+        closed=True,
+    )
+
+
+def _rising_bars(count: int) -> list[KlineBar]:
+    oldest_first = [_bar(i, 100.0 + i, seq=count - i) for i in range(count)]
+    return list(reversed(oldest_first))
 
 
 def test_rebuild_setup_stats_route_uses_injected_paths_and_function(tmp_path: Path) -> None:
@@ -103,3 +124,67 @@ def test_setup_stats_route_returns_compact_rows(tmp_path: Path) -> None:
         "expectancy_r": 0.3333333333333333,
     }
     assert rows[1]["sample_count"] == 2
+
+
+def test_rolling_summary_route_returns_empty_summary_without_cache(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    client = TestClient(create_app(context))
+
+    response = client.get("/api/backtest/rolling-summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "eastmoney"
+    assert payload["symbol"] == "000001"
+    assert payload["timeframe"] == "1h"
+    assert payload["window"] == 100
+    assert payload["bar_count"] == 0
+    assert payload["trade_signals"] == 0
+    assert payload["completed_trades"] == 0
+    assert payload["trades"] == []
+
+
+def test_rolling_summary_route_uses_cached_bars_and_query_window(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    context.kline_cache.write(
+        "eastmoney",
+        "000001",
+        "1h",
+        _rising_bars(36),
+        max_bars=2000,
+    )
+    client = TestClient(create_app(context))
+
+    response = client.get("/api/backtest/rolling-summary?window=30")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "eastmoney"
+    assert payload["symbol"] == "000001"
+    assert payload["timeframe"] == "1h"
+    assert payload["window"] == 30
+    assert payload["bar_count"] == 30
+    assert payload["evaluated_windows"] > 0
+    assert payload["trade_signals"] >= 1
+    assert payload["completed_trades"] >= 1
+    assert payload["wins"] >= 1
+    assert payload["expectancy_r"] == pytest.approx(payload["average_r"])
+
+
+def test_rolling_summary_route_uses_current_risk_profile(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    context.settings.general.decision_stance = "aggressive"
+    context.kline_cache.write(
+        "eastmoney",
+        "000001",
+        "1h",
+        _rising_bars(36),
+        max_bars=2000,
+    )
+    client = TestClient(create_app(context))
+
+    response = client.get("/api/backtest/rolling-summary?window=30")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["risk_profile"] == "aggressive"

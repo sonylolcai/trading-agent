@@ -66,6 +66,38 @@ def test_data_sources_route_lists_default_sources(tmp_path: Path) -> None:
     assert "mt5" in kinds
 
 
+def test_timeframes_route_uses_source_supported_values(tmp_path: Path) -> None:
+    client = TestClient(create_app(_context(tmp_path)))
+
+    response = client.get("/api/timeframes?source=eastmoney")
+
+    assert response.status_code == 200
+    assert "1w" in response.json()["items"]
+    assert "1M" in response.json()["items"]
+
+
+def test_market_selection_route_updates_current_source_symbol_and_timeframe(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    client = TestClient(create_app(context))
+
+    response = client.patch(
+        "/api/settings/market",
+        json={
+            "source": "tradingview",
+            "symbol": "XAUUSD",
+            "timeframe": "15m",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["general"]["last_data_source"] == "tradingview"
+    assert response.json()["general"]["last_symbol"] == "XAUUSD"
+    assert response.json()["general"]["last_timeframe"] == "15m"
+    assert context.settings.general.last_data_source == "tradingview"
+    assert context.settings.general.last_symbol == "XAUUSD"
+    assert context.settings.general.last_timeframe == "15m"
+
+
 def test_market_snapshot_reads_cache_and_keeps_newest_first(tmp_path: Path) -> None:
     context = _context(tmp_path)
     context.kline_cache.write(

@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
     def __init__(self, ctx: AppContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(
-            "PA Agent — Trading Terminal（分析仅供参考，不构成投资建议）"
+            "IQ — Trading Terminal（分析仅供参考，不构成投资建议）"
         )
         self.resize(1440, 900)
         self._ctx = ctx
@@ -2983,13 +2983,13 @@ class MainWindow(QMainWindow):
             strip.reset()
         # Clear previous support/resistance lines
         self._chart_widget.clear_support_resistance()
-        from pa_agent.ai.decision_stance import stance_label_zh
+        from pa_agent.ai.decision_stance import risk_profile_label_zh
 
         stance_raw = "balanced"
         settings = getattr(self._ctx, "settings", None)
         if settings is not None:
             stance_raw = getattr(settings.general, "decision_stance", "balanced")
-        stance_label = stance_label_zh(stance_raw)
+        stance_label = risk_profile_label_zh(stance_raw)
         if incremental_new_bar_count is not None:
             prefix = "强制增量分析中" if force_incremental else "增量分析中"
             if incremental_new_bar_count > 0:
@@ -2997,12 +2997,12 @@ class MainWindow(QMainWindow):
             else:
                 detail = "无新增K线，基于上一轮结论复核"
             self._status_bar.showMessage(
-                f"{prefix}…（倾向:{stance_label}，{detail}，图表已冻结）"
+                f"{prefix}…（档位:{stance_label}，{detail}，图表已冻结）"
             )
             logger.info("Incremental submit: %s", detail)
         else:
             self._status_bar.showMessage(
-                f"分析中…（倾向:{stance_label}，图表已冻结，K1=最新已收盘K线）"
+                f"分析中…（档位:{stance_label}，图表已冻结，K1=最新已收盘K线）"
             )
         self._decision_badge.setText("分析中…")
         self._ai_sidebar.focus_stream()

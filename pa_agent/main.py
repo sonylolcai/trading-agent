@@ -15,12 +15,12 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv if argv is None else argv)
     app = QApplication(argv)
-    app.setApplicationName("PA Agent")
+    app.setApplicationName("IQ")
 
     from pa_agent.gui.theme import apply_theme
     apply_theme(app)
 
-    logger.info("PA Agent starting up")
+    logger.info("IQ starting up")
 
     # Bootstrap all components (settings, data source, AI client, etc.)
     from pa_agent.app_context import AppContext

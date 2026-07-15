@@ -253,7 +253,7 @@ class FeishuSettingsDialog(QDialog):
 
         payload: dict = {
             "msg_type": "text",
-            "content": {"text": "✅ PA Agent 飞书通知测试消息，配置正常！"},
+            "content": {"text": "✅ IQ 飞书通知测试消息，配置正常！"},
         }
         secret = self._secret_edit.text().strip()
         if secret:

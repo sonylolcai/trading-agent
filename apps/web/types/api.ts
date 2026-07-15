@@ -1,4 +1,21 @@
-export type SettingsPayload = Record<string, unknown>;
+export type RiskProfile = 'conservative' | 'balanced' | 'aggressive' | 'extreme_aggressive';
+
+export type SettingsPayload = {
+  provider?: Record<string, unknown>;
+  general?: {
+    last_data_source?: string;
+    last_symbol?: string;
+    last_timeframe?: string;
+    decision_stance?: RiskProfile | string;
+    decision_confidence_threshold?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+export type RiskProfileRequest = {
+  risk_profile: RiskProfile;
+};
 
 export type DataSourceItem = {
   kind: string;
@@ -12,6 +29,12 @@ export type DataSourcesResponse = {
 
 export type TimeframesResponse = {
   items: string[];
+};
+
+export type MarketSelectionRequest = {
+  source?: string;
+  symbol?: string;
+  timeframe?: string;
 };
 
 export type KlineCacheResponse = {
@@ -63,9 +86,13 @@ export type RecordSummary = {
   timeframe: string;
   bar_count: number;
   decision_stance: string;
+  decision_confidence_threshold?: number | null;
   action: string;
   direction: string;
   has_exception: boolean;
+  stage1_diagnosis?: Record<string, unknown> | null;
+  stage2_decision?: AnalysisDecision | null;
+  analysis_report?: AnalysisReport | null;
 };
 
 export type RecordsResponse = {
@@ -104,6 +131,61 @@ export type AnalysisDecision = {
   [key: string]: unknown;
 };
 
+export type AnalysisReportTone = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+
+export type AnalysisReport = {
+  headline: {
+    action?: string | null;
+    direction?: string | null;
+    summary?: string;
+    risk?: string;
+  };
+  metrics: Array<{
+    label: string;
+    value: string | number | null;
+    unit?: string;
+    tone?: AnalysisReportTone;
+  }>;
+  decision: {
+    order_type?: string | null;
+    direction?: string | null;
+    risk_profile?: string | null;
+    signal_threshold?: number | string | null;
+    entry_price?: number | null;
+    stop_loss_price?: number | null;
+    take_profit_price?: number | null;
+    terminal?: Record<string, unknown> | null;
+  };
+  evidence_tables: Array<{
+    title: string;
+    rows: Array<{
+      node_id?: string;
+      section?: string;
+      question?: string;
+      answer?: string;
+      reason?: string;
+      bar_range?: string;
+      skipped?: boolean;
+    }>;
+  }>;
+  flows: Array<{
+    title: string;
+    items: Array<{
+      id: string;
+      label?: string;
+      value?: string;
+      detail?: string;
+      tone?: string;
+    }>;
+  }>;
+  probability_blocks: Array<{
+    title: string;
+    items: Array<{ label: string; value: number }>;
+    reasoning?: string;
+  }>;
+  lists: Array<{ title: string; items: string[] }>;
+};
+
 export type AnalysisRecordSummary = Partial<RecordSummary> & {
   record_id?: string;
   id?: string;
@@ -112,6 +194,7 @@ export type AnalysisRecordSummary = Partial<RecordSummary> & {
 };
 
 export type AnalysisRecordPayload = AnalysisRecordSummary & {
+  analysis_report?: AnalysisReport | null;
   stage1_diagnosis?: Record<string, unknown> | null;
   stage2_decision?: AnalysisDecision | null;
   exception?: Record<string, unknown> | null;
@@ -132,6 +215,7 @@ export type AnalysisStatusResponse = {
   frame?: KlineFramePayload;
   record?: AnalysisRecordPayload | null;
   record_summary?: AnalysisRecordSummary;
+  analysis_report?: AnalysisReport | null;
   stage2_decision?: AnalysisDecision | null;
   usage_total?: {
     prompt_tokens?: number;
@@ -151,7 +235,9 @@ export type AnalysisCancelResponse = {
 export type AnalysisEvent =
   | { type: 'stage_started'; stage?: string; [key: string]: unknown }
   | { type: 'reasoning_delta'; stage?: string; text?: string; [key: string]: unknown }
+  | { type: 'content_started'; stage?: string; format?: string; [key: string]: unknown }
   | { type: 'content_delta'; stage?: string; text?: string; [key: string]: unknown }
+  | { type: 'content_finished'; stage?: string; format?: string; text?: string; [key: string]: unknown }
   | { type: 'record_saved'; record_id?: string; [key: string]: unknown }
   | { type: 'task_finished'; status?: AnalysisStatus; [key: string]: unknown }
   | { type: 'error'; stage?: string; message?: string; [key: string]: unknown }
@@ -185,4 +271,48 @@ export type SetupStatsRow = {
 
 export type SetupStatsResponse = {
   rows: SetupStatsRow[];
+};
+
+export type RollingBacktestTrade = {
+  signal_index: number;
+  signal_seq: number;
+  entry_index: number | null;
+  entry_seq: number | null;
+  exit_index: number | null;
+  exit_seq: number | null;
+  order_type: string;
+  direction: string;
+  entry_price: number;
+  stop_loss_price: number;
+  take_profit_price: number;
+  status: string;
+  r_multiple: number;
+  bars_held: number;
+  reason: string;
+};
+
+export type RollingBacktestResponse = {
+  source: string;
+  symbol: string;
+  timeframe: string;
+  window: number;
+  bar_count: number;
+  evaluated_windows: number;
+  trade_signals: number;
+  completed_trades: number;
+  wins: number;
+  losses: number;
+  open_trades: number;
+  not_triggered: number;
+  invalid: number;
+  win_rate_pct: number;
+  expectancy_r: number;
+  average_r: number;
+  total_r: number;
+  profit_factor: number | null;
+  max_drawdown_r: number;
+  skipped_no_setup: number;
+  skipped_no_followthrough: number;
+  risk_profile?: string;
+  trades: RollingBacktestTrade[];
 };

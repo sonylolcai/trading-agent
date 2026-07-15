@@ -227,9 +227,13 @@ def _build_empty_record(
     from pa_agent.ai.decision_stance import normalize_stance
 
     decision_stance = "conservative"
+    decision_confidence_threshold = 40
     if settings is not None:
         decision_stance = normalize_stance(
             getattr(settings.general, "decision_stance", "conservative")
+        )
+        decision_confidence_threshold = int(
+            getattr(settings.general, "decision_confidence_threshold", 40)
         )
 
     meta = RecordMeta(
@@ -240,6 +244,7 @@ def _build_empty_record(
         bar_count=len(frame.bars),
         ai_provider=ai_provider,
         decision_stance=decision_stance,
+        decision_confidence_threshold=decision_confidence_threshold,
     )
 
     return AnalysisRecord(

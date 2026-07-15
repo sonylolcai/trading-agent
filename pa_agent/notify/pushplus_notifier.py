@@ -120,7 +120,7 @@ def _build_order_html(
         next_cycle_str = "—"
 
     lines = [
-        "<h3>PA Agent 下单信号</h3>",
+        "<h3>IQ 下单信号</h3>",
         "<p>",
         f"<b>品种</b>：{escape(symbol)}　<b>周期</b>：{escape(timeframe)}<br>",
         f"<b>下单类型</b>：{escape(order_type)}　<b>方向</b>：{escape(order_dir)}<br>",
@@ -154,7 +154,7 @@ def send_order_signal(
         logger.debug("PushPlus 通知已禁用（settings.json pushplus.enabled=false）")
         return False
 
-    title = f"PA Agent 下单信号 — {symbol} {timeframe}"
+    title = f"IQ 下单信号 — {symbol} {timeframe}"
     html_content = _build_order_html(
         decision_inner=decision_inner,
         stage2_full=stage2_full,

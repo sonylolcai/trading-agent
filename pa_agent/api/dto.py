@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+from pa_agent.api.analysis_report import build_analysis_report
 from pa_agent.config.settings import Settings
 from pa_agent.data.base import KlineBar, KlineFrame
 from pa_agent.records.schema import AnalysisRecord
@@ -97,8 +98,10 @@ def analysis_record_to_payload(record: AnalysisRecord) -> dict[str, Any]:
         "timeframe": record.meta.timeframe,
         "bar_count": record.meta.bar_count,
         "decision_stance": record.meta.decision_stance,
+        "decision_confidence_threshold": record.meta.decision_confidence_threshold,
         "stage1_diagnosis": record.stage1_diagnosis,
         "stage2_decision": record.stage2_decision,
+        "analysis_report": build_analysis_report(record),
         "exception": record.exception,
         "usage_total": record.usage_total,
     }
@@ -144,7 +147,11 @@ def record_summary_to_payload(path: Path, record: AnalysisRecord) -> dict[str, A
         "timeframe": record.meta.timeframe,
         "bar_count": record.meta.bar_count,
         "decision_stance": record.meta.decision_stance,
+        "decision_confidence_threshold": record.meta.decision_confidence_threshold,
         "action": action,
         "direction": direction,
         "has_exception": record.exception is not None,
+        "stage1_diagnosis": record.stage1_diagnosis,
+        "stage2_decision": record.stage2_decision,
+        "analysis_report": build_analysis_report(record),
     }

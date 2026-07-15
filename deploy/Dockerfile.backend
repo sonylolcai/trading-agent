@@ -1,27 +1,25 @@
 # PA Agent Backend Dockerfile
 # FastAPI server on port 8000
 
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-# Install system deps needed by akshare / baostock / curl_cffi
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Use Aliyun mirrors for apt
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
 
-# Copy dependency list and install
+# Copy dependency list and install (Tsinghua PyPI mirror)
 COPY deploy/requirements-server.txt /tmp/
-RUN pip install --no-cache-dir -r /tmp/requirements-server.txt
+RUN pip install --no-cache-dir --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r /tmp/requirements-server.txt
 
-# Copy the entire project (excluding GUI deps are handled by requirements-server.txt)
+# Copy the entire project
 COPY . .
 
 # Ensure runtime directories exist
 RUN mkdir -p config logs records/pending cache/kline trade_records
 
-# Create default settings.json if not present (will be generated at runtime anyway)
+# Create default settings.json if not present
 RUN python -c "from pa_agent.config.settings import load_settings; load_settings()" || true
 
 EXPOSE 8000

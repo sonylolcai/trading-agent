@@ -274,7 +274,7 @@ def _build_card(
         "header": {
             "title": {
                 "tag": "plain_text",
-                "content": f"🚨 PA Agent 下单信号 — {symbol} {timeframe}",
+                "content": f"🚨 IQ 下单信号 — {symbol} {timeframe}",
             },
             "template": color,
             "padding": "12px 12px 12px 12px",

@@ -8,7 +8,7 @@ def render_markdown_report(run: BacktestRun) -> str:
     metrics = run.metrics
     return "\n".join(
         [
-            "# PA Agent Backtest Report",
+            "# IQ Backtest Report",
             "",
             f"- total_signals: {metrics.total_signals}",
             f"- triggered_trades: {metrics.triggered_trades}",

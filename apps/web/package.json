@@ -2,7 +2,7 @@
   "name": "pa-agent-web",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 3000",
+    "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

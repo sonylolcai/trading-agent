@@ -106,6 +106,7 @@ def test_record_summary_does_not_expose_absolute_local_path(tmp_path) -> None:
             bar_count=100,
             ai_provider={},
             decision_stance="balanced",
+            decision_confidence_threshold=40,
         ),
         kline_data=[],
         htf_text="",
@@ -125,3 +126,6 @@ def test_record_summary_does_not_expose_absolute_local_path(tmp_path) -> None:
 
     assert payload["id"] == "record"
     assert "path" not in payload
+    assert payload["decision_confidence_threshold"] == 40
+    assert payload["analysis_report"]["decision"]["risk_profile"] == "balanced"
+    assert payload["analysis_report"]["decision"]["signal_threshold"] == 40

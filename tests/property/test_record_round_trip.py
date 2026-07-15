@@ -129,6 +129,7 @@ def analysis_record_st(draw: st.DrawFn) -> AnalysisRecord:
         timeframe=draw(st.text(min_size=1, max_size=10)),
         bar_count=draw(st.integers(min_value=1, max_value=5000)),
         ai_provider=draw(_ai_provider_st),
+        decision_confidence_threshold=draw(st.integers(min_value=0, max_value=100)),
     )
 
     return AnalysisRecord(

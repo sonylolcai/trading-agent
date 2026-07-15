@@ -1,4 +1,4 @@
-"""直接运行此文件启动 PA Agent。
+"""直接运行此文件启动 IQ。
 
 用法：
     python run.py

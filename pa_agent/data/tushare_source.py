@@ -155,7 +155,7 @@ class TushareSource(DataSource):
         if not token:
             raise DataSourceTransientError(
                 "缺少 TUSHARE_TOKEN。请在 config/settings.json 的 tushare.token 填写，"
-                "或设置本机环境变量后重启 PA Agent。"
+                "或设置本机环境变量后重启 IQ。"
             )
         try:
             import tushare as ts
@@ -282,7 +282,7 @@ class TushareSource(DataSource):
             msg = str(exc)
             if "频率超限" in msg:
                 raise DataSourceTransientError(
-                    f"Tushare 分钟线接口限频: {msg}。PA Agent 已缓存同一品种/周期，"
+                    f"Tushare 分钟线接口限频: {msg}。IQ 已缓存同一品种/周期，"
                     "请等待限频窗口结束后重试。"
                 ) from exc
             raise DataSourceTransientError(f"Tushare stk_mins 调用失败: {exc}") from exc

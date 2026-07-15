@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from pa_agent.config.settings import Settings, save_settings
 from pa_agent.config.paths import SETTINGS_JSON_PATH
+from pa_agent.ai.decision_stance import RISK_PROFILE_PRESETS, normalize_stance
 
 
 class GeneralSettingsDialog(QDialog):
@@ -62,16 +63,18 @@ class GeneralSettingsDialog(QDialog):
         trade_form.addRow("下单置信度门槛:", self._decision_conf_threshold_spin)
 
         self._decision_stance_combo = QComboBox()
-        self._decision_stance_combo.addItem("保守", "conservative")
-        self._decision_stance_combo.addItem("均衡（默认，比保守更愿意下单）", "balanced")
-        self._decision_stance_combo.addItem("激进（比均衡更愿意下单）", "aggressive")
-        self._decision_stance_combo.addItem("极度激进（强制选方向与进场方式）", "extreme_aggressive")
+        self._decision_stance_combo.addItem("稳健", "conservative")
+        self._decision_stance_combo.addItem("均衡（默认）", "balanced")
+        self._decision_stance_combo.addItem("进取", "aggressive")
+        self._decision_stance_combo.addItem("强进取（主动寻找进场方式）", "extreme_aggressive")
         self._decision_stance_combo.setToolTip(
-            "仅影响阶段二交易决策倾向；保守与改版前一致。\n"
-            "均衡、激进逐级提高下单意愿；极度激进在未触犯 §14 硬性禁止时\n"
-            "必须给出具体做多/做空及限价/突破/市价方案。"
+            "简单模式风险档位：仅影响阶段二交易决策倾向和下单信号强度门槛。\n"
+            "稳健更严格；均衡为默认；进取、强进取逐级提高机会输出意愿。"
         )
-        trade_form.addRow("交易倾向:", self._decision_stance_combo)
+        self._decision_stance_combo.currentIndexChanged.connect(
+            self._on_decision_stance_changed
+        )
+        trade_form.addRow("风险档位:", self._decision_stance_combo)
 
         self._alert_on_order_check = QCheckBox(
             "有下单机会时发出警报音和弹窗，并自动跳转到「决策」页"
@@ -209,7 +212,9 @@ class GeneralSettingsDialog(QDialog):
         stance = getattr(g, "decision_stance", "conservative")
         idx = self._decision_stance_combo.findData(stance)
         if idx >= 0:
+            self._decision_stance_combo.blockSignals(True)
             self._decision_stance_combo.setCurrentIndex(idx)
+            self._decision_stance_combo.blockSignals(False)
         self._alert_on_order_check.blockSignals(True)
         self._alert_on_order_check.setChecked(
             bool(getattr(g, "alert_on_order_opportunity", True))
@@ -297,6 +302,12 @@ class GeneralSettingsDialog(QDialog):
                 "下根K线预期",
                 "下根K线预期难度大，结果仅供参考。\n\nAI 预测单根K线方向的准确率有限，请勿将其作为交易依据。",
             )
+
+    def _on_decision_stance_changed(self) -> None:
+        stance = normalize_stance(self._decision_stance_combo.currentData())
+        self._decision_conf_threshold_spin.setValue(
+            RISK_PROFILE_PRESETS[stance].signal_threshold
+        )
 
     def _on_play_decision_flow_now(self) -> None:
         g = self._settings.general

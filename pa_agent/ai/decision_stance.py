@@ -1,6 +1,7 @@
 """Trading decision stance profiles for Stage 2 prompt injection."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 DecisionStance = Literal["conservative", "balanced", "aggressive", "extreme_aggressive"]
@@ -12,16 +13,57 @@ STANCE_LABELS_ZH: dict[str, str] = {
     "extreme_aggressive": "极度激进",
 }
 
+
+@dataclass(frozen=True)
+class RiskProfilePreset:
+    """Simple-mode risk profile mapped onto existing decision settings."""
+
+    profile: DecisionStance
+    label: str
+    signal_threshold: int
+    description: str
+
+
+RISK_PROFILE_PRESETS: dict[DecisionStance, RiskProfilePreset] = {
+    "conservative": RiskProfilePreset(
+        profile="conservative",
+        label="稳健",
+        signal_threshold=60,
+        description="只推送更清晰、更接近标准形态的交易机会。",
+    ),
+    "balanced": RiskProfilePreset(
+        profile="balanced",
+        label="均衡",
+        signal_threshold=40,
+        description="默认档位，兼顾信号质量与机会数量。",
+    ),
+    "aggressive": RiskProfilePreset(
+        profile="aggressive",
+        label="进取",
+        signal_threshold=30,
+        description="接受更早、更不完美但逻辑完整的机会。",
+    ),
+    "extreme_aggressive": RiskProfilePreset(
+        profile="extreme_aggressive",
+        label="强进取",
+        signal_threshold=25,
+        description="在未触犯硬性禁止项时主动寻找可执行方案。",
+    ),
+}
+
 _STANCE_ALIASES: dict[str, DecisionStance] = {
     "conservative": "conservative",
     "保守": "conservative",
+    "稳健": "conservative",
     "balanced": "balanced",
     "均衡": "balanced",
     "aggressive": "aggressive",
     "激进": "aggressive",
+    "进取": "aggressive",
     "extreme_aggressive": "extreme_aggressive",
     "extreme": "extreme_aggressive",
     "极度激进": "extreme_aggressive",
+    "强进取": "extreme_aggressive",
 }
 
 
@@ -41,6 +83,20 @@ def normalize_stance(value: str | None) -> DecisionStance:
 def stance_label_zh(stance: str | None) -> str:
     """Return Chinese label for UI."""
     return STANCE_LABELS_ZH.get(normalize_stance(stance), "保守")
+
+
+def risk_profile_label_zh(profile: str | None) -> str:
+    """Return product-facing risk profile label for UI."""
+    return RISK_PROFILE_PRESETS[normalize_stance(profile)].label
+
+
+def apply_risk_profile(general_settings: object, profile: str | None) -> RiskProfilePreset:
+    """Apply simple-mode risk profile values to a general settings object."""
+    normalized = normalize_stance(profile)
+    preset = RISK_PROFILE_PRESETS[normalized]
+    setattr(general_settings, "decision_stance", preset.profile)
+    setattr(general_settings, "decision_confidence_threshold", preset.signal_threshold)
+    return preset
 
 
 def build_decision_stance_guidance(stance: str | None) -> str:

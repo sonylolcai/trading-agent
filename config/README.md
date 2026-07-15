@@ -26,7 +26,7 @@
 
 ## `settings.json` 字段说明
 
-配置分为四个顶层组：`provider`、`general`、`prompt`、`validation`。
+配置主要分为 `provider`、`general`、`prompt`、`validation`，并包含通知和数据源扩展配置。`settings.example.json` 是可复制的示例模板；程序自动生成新配置时以 `pa_agent.config.settings.Settings` 的模型默认值为准。
 
 ### provider — AI 提供商
 
@@ -44,14 +44,19 @@
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `general.last_data_source` | string | `"mt5"` | K 线数据来源：`mt5` / `tradingview`（GUI 下拉选项）；`akshare` / `yfinance`（仅代码支持） |
+| `general.last_data_source` | string | `"eastmoney"` | K 线数据来源：`eastmoney` / `akshare` / `tushare` / `tradingview` / `mt5`。空值或未知值会回退到东方财富 A 股 |
 | `general.last_tradingview_exchange` | string | `""` | TradingView 交易所。空字符串 =（自动）依次探测预设列表。如 `OANDA`、`SSE`、`HKEX` 等 |
-| `general.last_symbol` | string | `"XAUUSDm"` | 默认品种。MT5 需含后缀（如 `m`），TradingView 用标准名（如 `XAUUSD`） |
-| `general.last_timeframe` | string | `"15m"` | 默认周期，如 `1m`、`5m`、`15m`、`1h`、`4h`、`1d` |
+| `general.last_symbol` | string | `"000001"` | 默认品种。A 股可用 6 位代码；MT5 需含后缀（如 `XAUUSDm`）；TradingView 用标准名（如 `XAUUSD`） |
+| `general.last_timeframe` | string | `"1h"` | 默认周期，如 `1m`、`5m`、`15m`、`1h`、`4h`、`1d` |
+| `general.kline_cache_enabled` | bool | `true` | 是否启用本地 K 线缓存；Web API 的快照和滚动回测会优先读取缓存 |
+| `general.kline_cache_max_bars` | int | `2000` | 单个品种/周期缓存的最大 K 线数量 |
+| `general.analysis_history_max_rows` | int | `200` | 分析历史页面/对话框默认读取的最大记录数 |
+| `general.kline_adjust` | string | `"qfq"` | A 股 K 线复权方式：`qfq` 前复权 / `hfq` 后复权 / `none` 不复权 |
 | `general.analysis_bar_count` | int | `100` | 提交分析时使用的 K 线数量（2–5000） |
 | `general.refresh_interval_ms` | int | `1000` | 图表自动刷新间隔（毫秒） |
 | `general.context_warning_threshold_pct` | float | `80.0` | 上下文占用警告阈值（百分比） |
-| `general.decision_stance` | string | `"balanced"` | 阶段二交易倾向：`conservative` / `balanced` / `aggressive` / `extreme_aggressive` |
+| `general.decision_stance` | string | `"balanced"` | 简单模式风险档位：`conservative`=稳健 / `balanced`=均衡 / `aggressive`=进取 / `extreme_aggressive`=强进取 |
+| `general.decision_confidence_threshold` | int | `40` | 下单信号强度门槛。简单模式切换档位时同步调整：稳健 60、均衡 40、进取 30、强进取 25 |
 | `general.incremental_max_new_bars` | int | `10` | 增量分析触发阈值：新增已收盘 K 线 ≤ 此值时自动走增量模式（0–500） |
 | `general.auto_resume_chart_after_analysis` | bool | `false` | 分析结束后是否自动恢复「图表实时更新」 |
 | `general.keep_analysis` | bool | `false` | 持续跟踪分析：新 K 线收盘时自动触发新一轮分析 |
@@ -62,6 +67,8 @@
 | `general.decision_flow_default_zoom_pct` | int | `500` | 决策树可视化默认缩放百分比（≥10） |
 | `general.stream_pane_font_pt` | int | `11` | 「实时」页等宽字体字号（pt，8–28） |
 | `general.chart_seq_label_font_pt` | int | `7` | K 线图上序号标签的字号（pt，6–24） |
+| `general.enable_next_bar_prediction` | bool | `false` | 是否请求下一根 K 线预期；关闭可节省 token |
+| `general.paper_trading_required` | bool | `true` | 是否要求纸面交易样本达标后再考虑实盘信号模式 |
 
 ### prompt — Prompt 组装调优
 
@@ -92,3 +99,19 @@
 - **不要**将 `config/settings.json`、`config/exception_state.json`、`config/tv_symbol_aliases.json` 提交到 Git。
 - 若曾误提交 API Key，请立即在服务商处**作废并轮换**密钥。
 - 建议在仓库根目录执行：`powershell -ExecutionPolicy Bypass -File tools\setup_git_secrets.ps1`
+
+## Web / API 配置
+
+Web 前端默认连接 `http://127.0.0.1:8765` 的本地 FastAPI 服务；如需改地址，在 `apps/web` 运行环境中设置：
+
+```cmd
+set NEXT_PUBLIC_PA_API_BASE_URL=http://127.0.0.1:8765
+```
+
+本地 API 启动命令：
+
+```cmd
+python -m pa_agent.api.main
+```
+
+该配置不写入 `config/settings.json`，属于前端运行环境变量。

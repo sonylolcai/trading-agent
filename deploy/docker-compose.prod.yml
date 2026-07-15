@@ -13,7 +13,6 @@ services:
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
     volumes:
-      # Persist runtime data
       - pa-agent-config:/app/config
       - pa-agent-logs:/app/logs
       - pa-agent-records:/app/records
@@ -34,14 +33,17 @@ services:
     container_name: pa-agent-web
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8090:80"
+      - "8090:80"
     networks:
       - pa-agent-net
+      - api-server_default
     volumes:
       - ./pa-agent-nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 networks:
   pa-agent-net:
+  api-server_default:
+    external: true
 
 volumes:
   pa-agent-config:

@@ -11,6 +11,9 @@ def test_normalize_stance_defaults_unknown_to_conservative():
     assert normalize_stance(None) == "conservative"
     assert normalize_stance("") == "conservative"
     assert normalize_stance("均衡") == "balanced"
+    assert normalize_stance("稳健") == "conservative"
+    assert normalize_stance("进取") == "aggressive"
+    assert normalize_stance("强进取") == "extreme_aggressive"
     assert normalize_stance("aggressive") == "aggressive"
 
 
@@ -30,8 +33,8 @@ def test_stance_guidance_balanced_more_aggressive_than_conservative():
 def test_stance_guidance_aggressive_more_than_balanced():
     balanced = build_decision_stance_guidance("balanced")
     aggressive = build_decision_stance_guidance("aggressive")
-    assert "1.0:1" in aggressive
-    assert "1.0:1" not in balanced
+    assert "更早、更不完美的入场触发" in aggressive
+    assert "更早、更不完美的入场触发" not in balanced
 
 
 def test_stance_guidance_extreme_aggressive_forces_trade():

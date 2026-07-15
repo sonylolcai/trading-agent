@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from pa_agent.api.context import ApiContext
 from pa_agent.api.dto import analysis_record_to_payload, frame_to_payload
+from pa_agent.api.market_data import MarketDataError, fetch_and_cache_kline_data
 from pa_agent.data.snapshot import build_analysis_frame
 
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -21,6 +22,7 @@ def _task_payload(task: Any) -> dict[str, Any]:
     record = None if task.record is None else analysis_record_to_payload(task.record)
     record_summary = None
     stage2_decision = None
+    analysis_report = None
     usage_total = None
     if record is not None:
         record_summary = {
@@ -30,8 +32,10 @@ def _task_payload(task: Any) -> dict[str, Any]:
             "timeframe": record["timeframe"],
             "bar_count": record["bar_count"],
             "decision_stance": record["decision_stance"],
+            "decision_confidence_threshold": record["decision_confidence_threshold"],
         }
         stage2_decision = record["stage2_decision"]
+        analysis_report = record["analysis_report"]
         usage_total = record["usage_total"]
     error = task.error
     if error is None and record is not None and isinstance(record.get("exception"), dict):
@@ -48,6 +52,7 @@ def _task_payload(task: Any) -> dict[str, Any]:
         "frame": frame_to_payload(task.frame),
         "record": record,
         "record_summary": record_summary,
+        "analysis_report": analysis_report,
         "stage2_decision": stage2_decision,
         "usage_total": usage_total,
         "error": error,
@@ -63,10 +68,19 @@ def start_analysis(request: Request) -> dict[str, Any]:
     timeframe = settings.general.last_timeframe
     entry = ctx.kline_cache.read(source, symbol, timeframe)
     if entry is None:
-        raise HTTPException(status_code=404, detail="No cached K-line snapshot found")
+        try:
+            entry = fetch_and_cache_kline_data(ctx)
+        except MarketDataError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     bar_count = int(settings.general.analysis_bar_count)
     frame = build_analysis_frame(list(entry.bars), bar_count, symbol, timeframe)
+    if frame is None:
+        try:
+            entry = fetch_and_cache_kline_data(ctx)
+            frame = build_analysis_frame(list(entry.bars), bar_count, symbol, timeframe)
+        except MarketDataError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     if frame is None:
         raise HTTPException(
             status_code=422,

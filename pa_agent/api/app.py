@@ -13,7 +13,7 @@ from pa_agent.api.routes_settings import router as settings_router
 
 
 def create_app(context: ApiContext | None = None) -> FastAPI:
-    app = FastAPI(title="PA Agent Local API")
+    app = FastAPI(title="IQ Local API")
     app.state.api_context = context or ApiContext.load()
     app.add_middleware(
         CORSMiddleware,

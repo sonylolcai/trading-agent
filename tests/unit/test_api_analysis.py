@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from pa_agent.api.app import create_app
 from pa_agent.api.context import ApiContext
 from pa_agent.config.settings import Settings
-from pa_agent.data.base import KlineBar, KlineFrame
+from pa_agent.data.base import IndicatorBundle, KlineBar, KlineFrame
 from pa_agent.data.kline_cache import KlineCacheStore
 from pa_agent.records.schema import AnalysisRecord, RecordMeta
 from pa_agent.util.threading import CancelToken
@@ -100,18 +100,58 @@ class FakeAnalysisRunner:
         self.cancel_tokens.append(cancel_token)
         self.started.set()
         emit({"type": "stage_started", "stage": "stage1"})
+        emit({"type": "content_started", "stage": "stage1", "format": "json"})
         emit({"type": "content_delta", "stage": "stage1", "text": "diagnosis"})
+        emit({"type": "content_finished", "stage": "stage1", "format": "json", "text": "diagnosis"})
         if self.block:
             self.release.wait(timeout=2)
             if cancel_token.is_set():
                 emit({"type": "cancelled"})
                 return _record(frame)
         emit({"type": "stage_started", "stage": "stage2"})
+        emit({"type": "content_started", "stage": "stage2", "format": "json"})
         emit({"type": "content_delta", "stage": "stage2", "text": "decision"})
+        emit({"type": "content_finished", "stage": "stage2", "format": "json", "text": "decision"})
         return _record(frame)
 
 
-def _context(tmp_path: Path, runner: FakeAnalysisRunner) -> ApiContext:
+class FakeKlineSource:
+    def __init__(self, bars: list[KlineBar]) -> None:
+        self.bars = bars
+        self.connected = False
+        self.disconnected = False
+        self.subscriptions: list[tuple[str, str]] = []
+        self.latest_requests: list[int] = []
+
+    def connect(self) -> None:
+        self.connected = True
+
+    def disconnect(self) -> None:
+        self.disconnected = True
+
+    def list_symbols(self) -> list[str]:
+        return ["000001"]
+
+    def supported_timeframes(self) -> list[str]:
+        return ["1h"]
+
+    def subscribe(self, symbol: str, timeframe: str) -> None:
+        self.subscriptions.append((symbol, timeframe))
+
+    def unsubscribe(self) -> None:
+        pass
+
+    def latest_snapshot(self, n: int) -> list[KlineBar]:
+        self.latest_requests.append(n)
+        return self.bars
+
+
+def _context(
+    tmp_path: Path,
+    runner: FakeAnalysisRunner,
+    *,
+    seed_cache: bool = True,
+) -> ApiContext:
     settings = Settings()
     settings.general.last_data_source = "eastmoney"
     settings.general.last_symbol = "000001"
@@ -123,13 +163,14 @@ def _context(tmp_path: Path, runner: FakeAnalysisRunner) -> ApiContext:
         records_dir=tmp_path / "records",
         analysis_runner=runner,
     )
-    context.kline_cache.write(
-        "eastmoney",
-        "000001",
-        "1h",
-        _recent_hourly_bars(),
-        max_bars=20,
-    )
+    if seed_cache:
+        context.kline_cache.write(
+            "eastmoney",
+            "000001",
+            "1h",
+            _recent_hourly_bars(),
+            max_bars=20,
+        )
     return context
 
 
@@ -159,6 +200,8 @@ def test_analysis_task_uses_cached_closed_only_frame_and_streams_events(tmp_path
     assert status_payload["event_count"] >= 5
     assert status_payload["record"]["symbol"] == "000001"
     assert status_payload["record"]["stage2_decision"]["decision"]["order_type"] == "market"
+    assert status_payload["record"]["analysis_report"]["decision"]["order_type"] == "market"
+    assert status_payload["analysis_report"]["decision"]["order_type"] == "market"
     assert status_payload["record"]["usage_total"]["total_tokens"] == 42
     assert status_payload["stage2_decision"]["decision"]["order_type"] == "market"
     assert status_payload["usage_total"]["total_tokens"] == 42
@@ -174,7 +217,9 @@ def test_analysis_task_uses_cached_closed_only_frame_and_streams_events(tmp_path
     body = events_response.text
     assert "event: message" in body
     assert '"type":"stage_started"' in body
+    assert '"type":"content_started"' in body
     assert '"type":"content_delta"' in body
+    assert '"type":"content_finished"' in body
     assert '"type":"task_finished"' in body
     parsed_events = [
         json.loads(line.removeprefix("data: "))
@@ -182,6 +227,71 @@ def test_analysis_task_uses_cached_closed_only_frame_and_streams_events(tmp_path
         if line.startswith("data: ")
     ]
     assert [event["type"] for event in parsed_events][-1] == "task_finished"
+
+
+def test_empty_analysis_record_captures_risk_profile_and_threshold() -> None:
+    from pa_agent.orchestrator.two_stage import _build_empty_record
+
+    settings = Settings()
+    settings.general.decision_stance = "aggressive"
+    settings.general.decision_confidence_threshold = 30
+    frame = KlineFrame(
+        symbol="000001",
+        timeframe="1h",
+        bars=tuple(_recent_hourly_bars()[1:3]),
+        indicators=IndicatorBundle(ema20=(12.0, 11.0), atr14=(1.0, 1.0)),
+        snapshot_ts_local_ms=1,
+    )
+
+    record = _build_empty_record(frame, settings)
+
+    assert record.meta.decision_stance == "aggressive"
+    assert record.meta.decision_confidence_threshold == 30
+
+
+def test_analysis_task_fetches_kline_data_when_cache_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runner = FakeAnalysisRunner()
+    source = FakeKlineSource(_recent_hourly_bars())
+    monkeypatch.setattr("pa_agent.data.factory.create_data_source", lambda kind: source)
+    context = _context(tmp_path, runner, seed_cache=False)
+    client = TestClient(create_app(context))
+
+    created = client.post("/api/analysis")
+
+    assert created.status_code == 202
+    assert source.connected is True
+    assert source.disconnected is True
+    assert source.subscriptions == [("000001", "1h")]
+    assert source.latest_requests and source.latest_requests[0] >= 2
+    assert context.kline_cache.read("eastmoney", "000001", "1h") is not None
+    assert [bar["seq"] for bar in created.json()["frame"]["bars"]] == [1, 2]
+
+
+def test_analysis_task_refetches_when_cached_bars_are_insufficient(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    runner = FakeAnalysisRunner()
+    source = FakeKlineSource(_recent_hourly_bars())
+    monkeypatch.setattr("pa_agent.data.factory.create_data_source", lambda kind: source)
+    context = _context(tmp_path, runner, seed_cache=False)
+    context.kline_cache.write(
+        "eastmoney",
+        "000001",
+        "1h",
+        [_bar(1, int(time.time() * 1000) - 60 * 60 * 1000, 13)],
+        max_bars=20,
+    )
+    client = TestClient(create_app(context))
+
+    created = client.post("/api/analysis")
+
+    assert created.status_code == 202
+    assert source.latest_requests and source.latest_requests[0] >= 2
+    assert [bar["seq"] for bar in created.json()["frame"]["bars"]] == [1, 2]
 
 
 def test_analysis_task_can_be_cancelled(tmp_path: Path) -> None:

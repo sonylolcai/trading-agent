@@ -21,6 +21,7 @@ class ApiContext:
     """Small API-only context that avoids bootstrapping GUI, AI, or live data."""
 
     settings: Settings
+    settings_path: Path | None = None
     kline_cache: KlineCacheStore = field(default_factory=KlineCacheStore)
     records_dir: Path = RECORDS_PENDING_DIR
     setup_stats_path: Path = SETUP_STATS_JSON_PATH
@@ -30,4 +31,4 @@ class ApiContext:
 
     @classmethod
     def load(cls) -> "ApiContext":
-        return cls(settings=load_settings(SETTINGS_JSON_PATH))
+        return cls(settings=load_settings(SETTINGS_JSON_PATH), settings_path=SETTINGS_JSON_PATH)

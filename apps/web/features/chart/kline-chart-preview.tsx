@@ -1,3 +1,4 @@
+import React from 'react';
 import { toChartCandles } from '../../lib/chart';
 import type { KlineFramePayload } from '../../types/api';
 

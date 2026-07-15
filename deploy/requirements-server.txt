@@ -1,10 +1,11 @@
 # Server-compatible Python dependencies
 # Excludes: PyQt6, pyqtgraph (GUI), MetaTrader5 (Windows-only), pywin32 (Windows-only)
+# Excludes: cryptography (only used by workbuddy_connector for encrypted key storage - server uses .env)
+# Excludes: tvdatafeed (TradingView - lazy-import, only needed if TradingView source is used)
 
 aiofiles>=23
 akshare>=1.14
 baostock>=0.8
-cryptography>=42
 curl_cffi>=0.13
 fastapi>=0.115
 jsonschema>=4.22
@@ -15,6 +16,3 @@ pydantic>=2.7
 tiktoken>=0.7
 tushare>=1.4
 uvicorn[standard]>=0.30
-
-# tvdatafeed from git
-tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git

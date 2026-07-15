@@ -1,7 +1,7 @@
 # 图表 K 线与「提交分析」快照说明
 
 本文说明：**为什么点击「提交分析」后，图表上有时会少显示 1 根 K 线**，以及程序这样设计的原理。  
-适用于 PA Agent 当前版本（图表实时更新 + 未收盘 K 线空心显示）。
+适用于 IQ 当前版本（桌面端图表实时更新、Web 端缓存快照、未收盘 K 线空心显示）。
 
 ---
 
@@ -51,14 +51,14 @@
 
 - 样式为 **浅色空心 K 线**（略窄于已收盘棒），便于与真实 K 线区分；
 - 该棒 **不参与** 阶段一 / 阶段二的 JSON 分析；
-- 仅用于你盯盘、等收盘，与 MT5 当前走势对齐。
+- 仅用于你盯盘、等收盘，与当前数据源的最新走势对齐。
 
 ---
 
 ## 3. 工作原理（数据流）
 
 ```text
-                    MT5 行情
+                当前数据源行情/缓存
                         │
                         ▼
               latest_snapshot（最新在前）
@@ -89,7 +89,7 @@
 
 ### 3.2 点击「提交分析」时程序做了什么？
 
-1. 从 MT5 拉取当前品种、周期的最新 K 线列表；  
+1. 从当前数据源或本地 K 线缓存读取当前品种、周期的最新 K 线列表；
 2. **丢弃** 列表最前面那根 `closed = false` 的未收盘棒；  
 3. 取接下来 **N 根已收盘** K 线，重新编号为 K1…KN（K1 最新）；  
 4. 计算 EMA20、ATR14、几何特征表，组装阶段一 / 阶段二 Prompt；  
@@ -102,7 +102,9 @@
 |------|------|
 | `pa_agent/data/snapshot.py` → `build_live_frame` | 实时图：N 已收盘 + 未收盘 |
 | `pa_agent/data/snapshot.py` → `build_analysis_frame` | 分析快照：仅 N 已收盘 |
-| `pa_agent/gui/main_window.py` → `_start_analysis` | 提交时冻结为分析帧 |
+| `pa_agent/gui/main_window.py` → `_start_analysis` | 桌面端提交时冻结为分析帧 |
+| `pa_agent/api/routes_market.py` → `/api/market/snapshot` | Web API 从缓存构建图表/分析快照 |
+| `apps/web/features/chart/kline-chart-preview.tsx` | Web 端 K 线快照预览 |
 | `pa_agent/gui/widgets/candle_item.py` | 未收盘棒空心绘制 |
 
 ### 3.3 序号 K1、K2 怎么理解？
@@ -134,7 +136,7 @@
 ### Q3：追问时图表和 AI 数据一致吗？
 
 发送追问前会 **刷新并冻结** 图表。  
-**画面上** 可能仍显示未收盘空心棒（便于你对照 MT5）；  
+**画面上** 可能仍显示未收盘空心棒（便于你对照实时行情）；
 **追问附带的 K 线文本表** 仍按 **已收盘** 导出，与阶段分析规则一致，避免把未走完的 K 线写进对话。
 
 ### Q4：和「演示模式」一样吗？
@@ -155,6 +157,6 @@
 
 ## 6. 相关文档
 
-- 整体用法：[`PA_Agent使用文档.md`](../PA_Agent使用文档.md)  
+- 整体用法：[`IQ使用文档`](../CandleCast使用文档.md)  
 - 项目概述：[`README.md`](../README.md)  
 - 本地配置：[`config/README.md`](../config/README.md)

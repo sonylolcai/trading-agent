@@ -136,7 +136,7 @@ def _self_test(port: int, token: str | None) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="PA Agent QClaw reasoning relay")
+    parser = argparse.ArgumentParser(description="IQ QClaw reasoning relay")
     parser.add_argument("--port", type=int, default=19004)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--token", default="")

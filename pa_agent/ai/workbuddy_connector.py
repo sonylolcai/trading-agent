@@ -521,7 +521,7 @@ def apply_workbuddy_provider_to_settings(
         return (
             "未检测到 WorkBuddy 环境。\n\n"
             "请确认：\n"
-            "1. PA Agent 是在 WorkBuddy 中运行的\n"
+            "1. IQ 是在 WorkBuddy 中运行的\n"
             "2. 已配置 WorkBuddy Token（见下方说明）"
         )
 
