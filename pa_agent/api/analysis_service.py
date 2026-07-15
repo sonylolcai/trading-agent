@@ -140,19 +140,39 @@ def default_analysis_runner(
     cancel_token: CancelToken,
     emit: Callable[[dict[str, Any] | OrchestratorEvent], None],
 ) -> AnalysisRecord:
-    """Run the production two-stage orchestrator in the background thread."""
-    from pa_agent.app_context import AppContext
+    """Run the production two-stage orchestrator without GUI dependencies."""
+    from pa_agent.ai.client_factory import create_ai_client
+    from pa_agent.ai.json_validator import JsonValidator
+    from pa_agent.ai.prompt_assembler import PromptAssembler
+    from pa_agent.ai.router import route_strategy_files
+    from pa_agent.config.paths import (
+        EXPERIENCE_DIR,
+        PROMPT_DIR,
+        RECORDS_PENDING_DIR,
+        SETTINGS_JSON_PATH,
+    )
+    from pa_agent.config.settings import load_settings
     from pa_agent.orchestrator.two_stage import TwoStageOrchestrator
+    from pa_agent.records.experience_reader import ExperienceReader
+    from pa_agent.records.pending_writer import PendingWriter
 
-    ctx = AppContext.bootstrap()
+    settings = load_settings(SETTINGS_JSON_PATH)
+    experience_reader = ExperienceReader(experience_dir=EXPERIENCE_DIR)
     orchestrator = TwoStageOrchestrator(
-        client=ctx.client,
-        assembler=ctx.assembler,
-        router=ctx.router,
-        validator=ctx.validator,
-        pending_writer=ctx.pending_writer,
-        exp_reader=ctx.exp_reader,
-        settings=ctx.settings,
+        client=create_ai_client(settings.provider),
+        assembler=PromptAssembler(
+            prompt_dir=PROMPT_DIR,
+            experience_reader=experience_reader,
+            prompt_settings=settings.prompt,
+        ),
+        router=route_strategy_files,
+        validator=JsonValidator(settings),
+        pending_writer=PendingWriter(
+            pending_dir=RECORDS_PENDING_DIR,
+            api_key=settings.provider.api_key,
+        ),
+        exp_reader=experience_reader,
+        settings=settings,
     )
     content_buffer = StructuredContentBuffer()
     record = orchestrator.submit(
