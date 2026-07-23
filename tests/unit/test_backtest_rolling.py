@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pa_agent.backtest.rolling import build_rolling_summary
+from pa_agent.backtest.rolling import build_rolling_comparison, build_rolling_summary
 from pa_agent.data.base import KlineBar
 
 
@@ -68,6 +68,52 @@ def _choppy_uptrend_bars(count: int) -> list[KlineBar]:
     return list(reversed(oldest_first))
 
 
+def _rising_bars_with_climactic_breakout(count: int) -> list[KlineBar]:
+    oldest_first = []
+    for index in range(count):
+        close = 100.0 + index
+        if index == 24:
+            oldest_first.append(
+                KlineBar(
+                    seq=count - index,
+                    ts_open=float(index * 60_000),
+                    open=close - 0.4,
+                    high=close + 5.0,
+                    low=close - 0.9,
+                    close=close,
+                    volume=500.0,
+                    amount=5000.0,
+                    closed=True,
+                )
+            )
+        else:
+            oldest_first.append(_bar(index, close, seq=count - index))
+    return list(reversed(oldest_first))
+
+
+def _rising_bars_with_volume_confirmation(count: int) -> list[KlineBar]:
+    oldest_first = []
+    for index in range(count):
+        close = 100.0 + index
+        if index == 24:
+            oldest_first.append(
+                KlineBar(
+                    seq=count - index,
+                    ts_open=float(index * 60_000),
+                    open=close - 0.4,
+                    high=close + 0.3,
+                    low=close - 0.9,
+                    close=close,
+                    volume=500.0,
+                    amount=5000.0,
+                    closed=True,
+                )
+            )
+        else:
+            oldest_first.append(_bar(index, close, seq=count - index))
+    return list(reversed(oldest_first))
+
+
 def test_rolling_summary_returns_zero_metrics_for_empty_bars() -> None:
     summary = build_rolling_summary(
         source="eastmoney",
@@ -83,6 +129,7 @@ def test_rolling_summary_returns_zero_metrics_for_empty_bars() -> None:
         "timeframe": "1h",
         "window": 100,
         "bar_count": 0,
+        "max_holding_bars": None,
         "evaluated_windows": 0,
         "trade_signals": 0,
         "completed_trades": 0,
@@ -99,6 +146,8 @@ def test_rolling_summary_returns_zero_metrics_for_empty_bars() -> None:
         "max_drawdown_r": 0.0,
         "skipped_no_setup": 0,
         "skipped_no_followthrough": 0,
+        "skipped_volume_caution": 0,
+        "volume_caution_reasons": {},
         "risk_profile": "conservative",
         "trades": [],
     }
@@ -185,3 +234,84 @@ def test_rolling_summary_risk_profile_changes_trade_frequency() -> None:
     assert conservative["risk_profile"] == "conservative"
     assert aggressive["risk_profile"] == "aggressive"
     assert aggressive["trade_signals"] > conservative["trade_signals"]
+
+
+def test_rolling_comparison_returns_price_only_and_volume_assisted_summaries() -> None:
+    payload = build_rolling_comparison(
+        source="eastmoney",
+        symbol="000001",
+        timeframe="1h",
+        bars=_rising_bars(36),
+        window=30,
+    ).to_payload()
+
+    assert payload["source"] == "eastmoney"
+    assert payload["symbol"] == "000001"
+    assert payload["price_only"]["bar_count"] == 30
+    assert payload["volume_assisted"]["bar_count"] == 30
+    assert payload["delta"]["trade_signals"] == (
+        payload["volume_assisted"]["trade_signals"]
+        - payload["price_only"]["trade_signals"]
+    )
+
+
+def test_rolling_comparison_skips_climactic_breakout_only_for_volume_assisted_policy() -> None:
+    payload = build_rolling_comparison(
+        source="eastmoney",
+        symbol="000001",
+        timeframe="1h",
+        bars=_rising_bars_with_climactic_breakout(36),
+        window=36,
+    ).to_payload()
+
+    assert payload["price_only"]["trade_signals"] == payload["volume_assisted"]["trade_signals"] + 1
+    assert payload["volume_assisted"]["skipped_volume_caution"] == 1
+    assert payload["volume_assisted"]["volume_caution_reasons"] == {
+        "high_volume_weak_long_breakout": 1
+    }
+    assert payload["delta"]["trade_signals"] == -1
+
+
+def test_rolling_comparison_audits_every_price_signal_by_volume_context() -> None:
+    payload = build_rolling_comparison(
+        source="eastmoney",
+        symbol="000001",
+        timeframe="1h",
+        bars=_rising_bars_with_climactic_breakout(36),
+        window=36,
+    ).to_payload()
+
+    contexts = payload["volume_contexts"]
+
+    assert set(contexts) == {"confirmed", "caution", "neutral", "unavailable"}
+    assert sum(context["trade_signals"] for context in contexts.values()) == payload["price_only"]["trade_signals"]
+    assert contexts["caution"]["trade_signals"] == 1
+
+
+def test_rolling_comparison_adds_a_confirmed_volume_candidate_without_changing_price_only() -> None:
+    payload = build_rolling_comparison(
+        source="eastmoney",
+        symbol="000001",
+        timeframe="1h",
+        bars=_rising_bars_with_volume_confirmation(36),
+        window=36,
+    ).to_payload()
+
+    assert payload["price_only"]["trade_signals"] > 1
+    assert payload["volume_confirmed"]["trade_signals"] == 1
+    assert payload["volume_confirmed"]["trade_signals"] == payload["volume_contexts"]["confirmed"]["trade_signals"]
+
+
+def test_rolling_comparison_adds_a_time_limited_exit_candidate_for_confirmed_entries() -> None:
+    payload = build_rolling_comparison(
+        source="eastmoney",
+        symbol="000001",
+        timeframe="1h",
+        bars=_rising_bars_with_volume_confirmation(36),
+        window=36,
+    ).to_payload()
+
+    candidate = payload["volume_confirmed_time_exit"]
+
+    assert candidate["max_holding_bars"] == 10
+    assert candidate["trade_signals"] == payload["volume_confirmed"]["trade_signals"]

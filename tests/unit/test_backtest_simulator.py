@@ -89,6 +89,29 @@ def test_breakout_same_bar_target_and_stop_is_conservative_loss() -> None:
     assert result.r_multiple == pytest.approx(-1.0)
 
 
+def test_market_order_can_exit_at_close_when_max_holding_period_is_reached() -> None:
+    decision = {
+        "order_direction": "做多",
+        "order_type": "市价单",
+        "entry_price": 100,
+        "take_profit_price": 110,
+        "stop_loss_price": 95,
+    }
+    future_bars = [
+        _bar(1, open_=100, high=104, low=99, close=103),
+        _bar(2, open_=103, high=104, low=101, close=102),
+    ]
+
+    result = simulate_decision(decision, future_bars, max_holding_bars=2)
+
+    assert result.status == "win"
+    assert result.entry_triggered is True
+    assert result.exit_price == pytest.approx(102)
+    assert result.bars_held == 2
+    assert result.r_multiple == pytest.approx(0.4)
+    assert result.reason == "max holding period reached"
+
+
 def test_invalid_price_geometry_returns_invalid_result() -> None:
     decision = {
         "order_direction": "做多",

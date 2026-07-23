@@ -8,6 +8,7 @@ import type {
   MarketSelectionRequest,
   RecordsResponse,
   RiskProfileRequest,
+  RollingBacktestComparisonResponse,
   RollingBacktestResponse,
   SettingsPayload,
   SetupStatsResponse,
@@ -92,6 +93,15 @@ export const api = {
   rollingBacktestSummary: (payload?: MarketSelectionRequest & { window?: number }) =>
     request<RollingBacktestResponse>(
       `/api/backtest/rolling-summary${queryString({
+        source: payload?.source,
+        symbol: payload?.symbol,
+        timeframe: payload?.timeframe,
+        window: payload?.window,
+      })}`,
+    ),
+  rollingBacktestComparison: (payload?: MarketSelectionRequest & { window?: number }) =>
+    request<RollingBacktestComparisonResponse>(
+      `/api/backtest/rolling-comparison${queryString({
         source: payload?.source,
         symbol: payload?.symbol,
         timeframe: payload?.timeframe,

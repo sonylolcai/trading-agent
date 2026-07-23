@@ -297,6 +297,7 @@ export type RollingBacktestResponse = {
   timeframe: string;
   window: number;
   bar_count: number;
+  max_holding_bars: number | null;
   evaluated_windows: number;
   trade_signals: number;
   completed_trades: number;
@@ -313,6 +314,44 @@ export type RollingBacktestResponse = {
   max_drawdown_r: number;
   skipped_no_setup: number;
   skipped_no_followthrough: number;
+  skipped_volume_caution: number;
+  volume_caution_reasons: Record<string, number>;
   risk_profile?: string;
   trades: RollingBacktestTrade[];
+};
+
+export type VolumeContextName = 'confirmed' | 'caution' | 'neutral' | 'unavailable';
+
+export type RollingVolumeContextResponse = {
+  trade_signals: number;
+  completed_trades: number;
+  wins: number;
+  losses: number;
+  open_trades: number;
+  not_triggered: number;
+  win_rate_pct: number;
+  expectancy_r: number;
+  total_r: number;
+};
+
+export type RollingBacktestComparisonResponse = {
+  source: string;
+  symbol: string;
+  timeframe: string;
+  window: number;
+  risk_profile?: string;
+  price_only: RollingBacktestResponse;
+  volume_assisted: RollingBacktestResponse;
+  volume_confirmed: RollingBacktestResponse;
+  volume_confirmed_time_exit: RollingBacktestResponse;
+  volume_contexts: Record<VolumeContextName, RollingVolumeContextResponse>;
+  delta: {
+    trade_signals: number;
+    completed_trades: number;
+    wins: number;
+    losses: number;
+    total_r: number;
+    expectancy_r: number;
+    max_drawdown_r: number;
+  };
 };

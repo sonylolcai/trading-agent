@@ -27,4 +27,22 @@ describe('api', () => {
       }),
     );
   });
+
+  it('requests a rolling price-versus-volume comparison', async () => {
+    const fetchMock = vi.fn(async () => (
+      new Response(JSON.stringify({ price_only: {}, volume_assisted: {}, delta: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await api.rollingBacktestComparison({ window: 30 });
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8765/api/backtest/rolling-comparison?window=30',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
 });

@@ -188,3 +188,37 @@ def test_rolling_summary_route_uses_current_risk_profile(tmp_path: Path) -> None
     assert response.status_code == 200
     payload = response.json()
     assert payload["risk_profile"] == "aggressive"
+
+
+def test_rolling_comparison_route_returns_both_policies_from_cached_bars(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    context.kline_cache.write(
+        "eastmoney",
+        "000001",
+        "1h",
+        _rising_bars(36),
+        max_bars=2000,
+    )
+    client = TestClient(create_app(context))
+
+    response = client.get("/api/backtest/rolling-comparison?window=30")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "eastmoney"
+    assert payload["window"] == 30
+    assert payload["price_only"]["bar_count"] == 30
+    assert payload["volume_assisted"]["bar_count"] == 30
+    assert payload["volume_confirmed"]["bar_count"] == 30
+    assert payload["volume_confirmed_time_exit"]["bar_count"] == 30
+    assert payload["volume_confirmed_time_exit"]["max_holding_bars"] == 10
+    assert "trade_signals" in payload["delta"]
+    assert set(payload["volume_contexts"]) == {
+        "confirmed",
+        "caution",
+        "neutral",
+        "unavailable",
+    }
+    assert sum(context["trade_signals"] for context in payload["volume_contexts"].values()) == payload["price_only"]["trade_signals"]
+    assert payload["volume_confirmed"]["trade_signals"] == payload["volume_contexts"]["confirmed"]["trade_signals"]
+    assert payload["volume_confirmed_time_exit"]["trade_signals"] == payload["volume_confirmed"]["trade_signals"]

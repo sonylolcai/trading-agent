@@ -100,6 +100,8 @@ def _open_r_multiple(*, long: bool, entry: float, risk: float, close: float) -> 
 def simulate_decision(
     decision_or_stage2: dict[str, Any],
     future_bars: Iterable[KlineBar],
+    *,
+    max_holding_bars: int | None = None,
 ) -> TradeSimulation:
     """Simulate one Stage 2 order against future K-lines.
 
@@ -171,6 +173,7 @@ def simulate_decision(
         )
 
     bars_to_scan = bars[entry_index:]
+    holding_limit = None if max_holding_bars is None else max(1, int(max_holding_bars))
     for held, bar in enumerate(bars_to_scan, 1):
         status, exit_price, ambiguous = _exit_hit(
             long=long,
@@ -197,6 +200,21 @@ def simulate_decision(
                 bars_held=held,
                 reason="stop hit" if not ambiguous else "target and stop hit in same bar",
                 ambiguous=ambiguous,
+            )
+        if holding_limit is not None and held >= holding_limit:
+            time_exit_r = _open_r_multiple(
+                long=long,
+                entry=entry,
+                risk=risk,
+                close=float(bar.close),
+            )
+            return TradeSimulation(
+                status="win" if time_exit_r > 0 else "loss",
+                r_multiple=time_exit_r,
+                entry_triggered=True,
+                exit_price=float(bar.close),
+                bars_held=held,
+                reason="max holding period reached",
             )
 
     last = bars_to_scan[-1]

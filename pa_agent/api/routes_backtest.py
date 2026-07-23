@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query, Request
 from pa_agent.api.context import ApiContext
 from pa_agent.api.dto import setup_stats_row_to_payload
 from pa_agent.api.market_data import current_market_selection
-from pa_agent.backtest.rolling import build_rolling_summary
+from pa_agent.backtest.rolling import build_rolling_comparison, build_rolling_summary
 from pa_agent.backtest.stats_store import SetupStatsLedger
 from pa_agent.data.factory import default_symbol_for_kind, normalize_data_source_kind
 
@@ -89,3 +89,31 @@ def rolling_summary(
         risk_profile=getattr(ctx.settings.general, "decision_stance", None),
     )
     return summary.to_payload()
+
+
+@router.get("/backtest/rolling-comparison")
+def rolling_comparison(
+    request: Request,
+    source: str | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    window: int = Query(default=100, ge=1, le=5000),
+) -> dict[str, Any]:
+    """Compare the baseline price-action proxy against its volume-assisted variant."""
+    ctx = _ctx(request)
+    selected_source, selected_symbol, selected_timeframe = _query_selection(
+        ctx,
+        source=source,
+        symbol=symbol,
+        timeframe=timeframe,
+    )
+    entry = ctx.kline_cache.read(selected_source, selected_symbol, selected_timeframe)
+    comparison = build_rolling_comparison(
+        source=selected_source,
+        symbol=selected_symbol,
+        timeframe=selected_timeframe,
+        bars=entry.bars if entry is not None else (),
+        window=window,
+        risk_profile=getattr(ctx.settings.general, "decision_stance", None),
+    )
+    return comparison.to_payload()
