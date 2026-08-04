@@ -42,6 +42,8 @@ class AnalysisRecord(BaseModel):
     experience_loaded: list[dict]
     exception: Optional[dict]           # If error occurred: category + debug info
     usage_total: dict                   # Cumulative usage for audit
+    research_context: dict = Field(default_factory=dict)
+    # Optional A/B metadata.  Defaults keep all existing persisted records compatible.
 
 
 class FollowupTurn(BaseModel):

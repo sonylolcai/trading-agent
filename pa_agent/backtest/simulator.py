@@ -21,6 +21,9 @@ class TradeSimulation:
     bars_held: int
     reason: str
     ambiguous: bool = False
+    entry_bar_index: int | None = None
+    # Offset within the chronological future-bar sequence.  It is retained for
+    # portfolio-aware replay; ``None`` means no entry was ever triggered.
 
 
 def _decision_dict(decision_or_stage2: dict[str, Any]) -> dict[str, Any]:
@@ -190,6 +193,7 @@ def simulate_decision(
                 bars_held=held,
                 reason="target hit",
                 ambiguous=ambiguous,
+                entry_bar_index=entry_index,
             )
         if status == "loss":
             return TradeSimulation(
@@ -200,6 +204,7 @@ def simulate_decision(
                 bars_held=held,
                 reason="stop hit" if not ambiguous else "target and stop hit in same bar",
                 ambiguous=ambiguous,
+                entry_bar_index=entry_index,
             )
         if holding_limit is not None and held >= holding_limit:
             time_exit_r = _open_r_multiple(
@@ -215,6 +220,7 @@ def simulate_decision(
                 exit_price=float(bar.close),
                 bars_held=held,
                 reason="max holding period reached",
+                entry_bar_index=entry_index,
             )
 
     last = bars_to_scan[-1]
@@ -230,4 +236,5 @@ def simulate_decision(
         exit_price=float(last.close),
         bars_held=len(bars_to_scan),
         reason="still open after supplied bars",
+        entry_bar_index=entry_index,
     )

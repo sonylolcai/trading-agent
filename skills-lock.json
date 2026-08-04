@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "backtest-expert": {
+      "source": "Wind-Information-Co-Ltd/wind-skills",
+      "sourceType": "github",
+      "skillPath": "skills/backtest-expert/SKILL.md",
+      "computedHash": "637280a11ddca68ecd21868b5ba9362eb46578f2bb5b7d09b0dcfb70eeb30cce"
+    }
+  }
+}

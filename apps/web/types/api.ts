@@ -355,3 +355,110 @@ export type RollingBacktestComparisonResponse = {
     max_drawdown_r: number;
   };
 };
+
+export type OkxConnectionStatus = {
+  provider: 'OKX';
+  mode: 'demo' | 'live';
+  base_url: string;
+  credentials_configured: boolean;
+  public_api_reachable: boolean;
+  authenticated: boolean;
+  server_time_ms?: number;
+  account?: {
+    total_equity_usd: number;
+    currencies: Array<{
+      currency: string;
+      equity: number;
+      available: number;
+    }>;
+  };
+};
+
+export type CryptoBacktestRequest = {
+  years: number;
+  target_volatility: number;
+  cost_bps: number;
+  rebalance_days: number;
+  strategy_version: '1.0' | '2.0';
+};
+
+export type CryptoPerformanceMetrics = {
+  total_return: number;
+  cagr: number;
+  annual_volatility: number;
+  sharpe: number | null;
+  max_drawdown: number;
+  calmar: number | null;
+  positive_days_pct: number;
+  final_equity?: number;
+  average_gross_exposure?: number;
+  annual_turnover?: number;
+  rebalance_count?: number;
+  total_cost?: number;
+};
+
+export type CryptoBacktestResponse = {
+  strategy: {
+    name: string;
+    version: string;
+    execution: string;
+    funding_history_included: boolean;
+    shorting_enabled: boolean;
+  };
+  config: CryptoBacktestRequest & { assets: string[] };
+  sample: { start: string; end: string; days: number };
+  metrics: CryptoPerformanceMetrics;
+  benchmark: CryptoPerformanceMetrics & { name: string };
+  validation: {
+    early_70_pct: CryptoPerformanceMetrics & { start: string; end: string; days: number };
+    recent_30_pct: CryptoPerformanceMetrics & { start: string; end: string; days: number };
+  };
+  stress: CryptoPerformanceMetrics & { name: string; cost_bps: number };
+  latest: {
+    date: string;
+    regime: 'risk_on' | 'neutral' | 'range' | 'risk_off' | 'crisis';
+    weights: Record<string, number>;
+    cash_weight: number;
+  };
+  annual_returns: Record<string, number>;
+  regime_days: Record<string, number>;
+  diagnostics: {
+    entry_count: number | null;
+    exit_counts: Record<string, number>;
+    emergency_exit_count: number;
+    regime_deleveraging_count: number;
+    long_only: boolean;
+    range_new_entries_allowed: boolean | null;
+  };
+  baseline_v1?: {
+    metrics: CryptoPerformanceMetrics;
+    recent_30_pct: CryptoPerformanceMetrics & {
+      start: string;
+      end: string;
+      days: number;
+    };
+    latest: {
+      date: string;
+      regime: 'risk_on' | 'neutral' | 'risk_off' | 'crisis';
+      weights: Record<string, number>;
+      cash_weight: number;
+    };
+  };
+  curve: Array<{
+    date: string;
+    equity: number;
+    benchmark: number;
+    drawdown: number;
+    gross_exposure: number;
+  }>;
+  source: {
+    provider: 'OKX';
+    endpoint: string;
+    bar: string;
+    closed_candles_only: boolean;
+    raw_bar_counts: Record<string, number>;
+    calendar_bar_count: number;
+    common_bar_count: number;
+    fetched_at: string;
+  };
+};

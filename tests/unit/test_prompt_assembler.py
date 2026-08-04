@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from pa_agent.ai.prompt_assembler import PromptAssembler
+from pa_agent.ai.volume_context import build_volume_price_context
 from pa_agent.data.base import KlineBar, KlineFrame, IndicatorBundle
 
 
@@ -337,6 +338,28 @@ def test_stage1_message_roles(assembler: PromptAssembler):
     assert len(messages) == 2
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
+
+
+def test_volume_research_context_is_opt_in_for_both_full_stage_prompts(
+    assembler: PromptAssembler,
+) -> None:
+    """The baseline stays unchanged; the experimental arm gets one read-only block."""
+    frame = _make_frame(25)
+    context = build_volume_price_context(frame)
+
+    baseline_stage1 = assembler.build_stage1(frame)[1]["content"]
+    volume_stage1 = assembler.build_stage1(frame, volume_context=context)[1]["content"]
+    volume_stage2 = assembler.build_stage2(
+        frame,
+        {"cycle_position": "normal_channel", "direction": "bullish"},
+        [],
+        [],
+        volume_context=context,
+    )[1]["content"]
+
+    assert "量价辅助上下文" not in baseline_stage1
+    assert "量价辅助上下文" in volume_stage1
+    assert "量价辅助上下文" in volume_stage2
 
 
 def test_stage2_message_roles(assembler: PromptAssembler):

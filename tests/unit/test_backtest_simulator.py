@@ -47,6 +47,7 @@ def test_market_long_hits_target_and_ignores_forming_bar() -> None:
     assert result.entry_triggered is True
     assert result.ambiguous is False
     assert result.r_multiple == pytest.approx(1.0)
+    assert result.entry_bar_index == 0
 
 
 def test_limit_order_not_triggered_is_not_counted_as_trade() -> None:

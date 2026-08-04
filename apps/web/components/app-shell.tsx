@@ -3,11 +3,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Activity, BarChart3, History, Terminal, Languages } from 'lucide-react';
+import { Activity, BarChart3, Coins, History, Terminal, Languages } from 'lucide-react';
 import { useI18n } from '../lib/i18n/context';
 
 const navItems = [
   { href: '/terminal', label: 'Terminal', icon: Terminal },
+  { href: '/crypto', label: 'Crypto', icon: Coins },
   { href: '/history', label: 'History', icon: History },
   { href: '/backtest', label: 'Backtest', icon: BarChart3 },
 ];

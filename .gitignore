@@ -24,6 +24,7 @@ apps/web/tsconfig.tsbuildinfo
 # ── 密钥与本地配置（切勿提交）────────────────────────────────────────────────
 .env
 .env.*
+!.env.example
 config/settings.json
 config/settings.local.json
 config/exception_state.json

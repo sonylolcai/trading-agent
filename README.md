@@ -85,6 +85,20 @@ pnpm dev
 
 Web 前端运行在 `http://127.0.0.1:3000`，通过环境变量 `NEXT_PUBLIC_PA_API_BASE_URL`（默认 `http://127.0.0.1:8765`）连接 API。没有 pnpm 时也可使用 `npm install` / `npm run dev`。
 
+### OKX 模拟账户（可选）
+
+加密策略页无需密钥即可读取 OKX 公开历史日线并运行回测。若要检测模拟账户连接，请先在 OKX 的 Demo Trading 中创建 API Key，然后编辑项目根目录的 `.env`：
+
+```dotenv
+OKX_BASE_URL=https://www.okx.com
+OKX_DEMO_TRADING=1
+OKX_API_KEY=<demo-api-key>
+OKX_API_SECRET=<demo-api-secret>
+OKX_API_PASSPHRASE=<demo-passphrase>
+```
+
+项目同时提供可提交的 `.env.example`。真实 `.env` 已被 Git 忽略；系统环境变量的优先级高于 `.env`。保存后重启 `python -m pa_agent.api.main` 即可。区域域名可通过 `OKX_BASE_URL` 覆盖，默认是 `https://www.okx.com`。密钥只由本机 Python API 读取，不会返回给 Web 页面。当前集成只包含公开行情与只读账户状态，不包含下单接口。
+
 ---
 
 ## API 接口速览
@@ -106,6 +120,8 @@ Web 前端运行在 `http://127.0.0.1:3000`，通过环境变量 `NEXT_PUBLIC_PA
 | `POST` | `/api/backtest/rebuild-setup-stats` | 重建策略统计 |
 | `GET` | `/api/backtest/setup-stats` | 策略统计查询 |
 | `GET` | `/api/backtest/rolling-summary` | 滚动回测摘要 |
+| `GET` | `/api/crypto/okx/status` | OKX 公开接口与模拟账户只读连接状态 |
+| `POST` | `/api/crypto/backtest` | 五资产 OKX 历史组合回测 |
 
 ---
 

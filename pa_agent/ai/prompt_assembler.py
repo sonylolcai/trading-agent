@@ -20,6 +20,7 @@ from pa_agent.ai.market_features import (
     inject_market_features_section,
     render_simple_market_features,
 )
+from pa_agent.ai.volume_context import VolumePriceContext
 from pa_agent.data.base import KlineFrame
 from pa_agent.data.datetime_ts import format_epoch_for_display
 from pa_agent.records.schema import AnalysisRecord
@@ -1043,10 +1044,20 @@ class PromptAssembler:
 
     # ── Stage 1 ───────────────────────────────────────────────────────────────
 
-    def build_stage1(self, frame: KlineFrame, *, analysis_mode: str = "original") -> list[dict]:
+    def build_stage1(
+        self,
+        frame: KlineFrame,
+        *,
+        analysis_mode: str = "original",
+        volume_context: VolumePriceContext | None = None,
+    ) -> list[dict]:
         """Build the message list for Stage 1 (market diagnosis)."""
         system_content = self._build_stage1_system_prompt()
-        user_content = self._build_stage1_user_prompt(frame, analysis_mode=analysis_mode)
+        user_content = self._build_stage1_user_prompt(
+            frame,
+            analysis_mode=analysis_mode,
+            volume_context=volume_context,
+        )
 
         return [
             {"role": "system", "content": system_content},
@@ -1084,6 +1095,7 @@ class PromptAssembler:
         *,
         analysis_mode: str = "original",
         provider_settings: Any | None = None,
+        volume_context: VolumePriceContext | None = None,
     ) -> list[dict]:
         """Build Stage 1 as a continuation-based incremental update.
 
@@ -1168,6 +1180,7 @@ class PromptAssembler:
             previous_record,
             new_bar_count,
             analysis_mode=analysis_mode,
+            volume_context=volume_context,
         )
 
         return [
@@ -1270,7 +1283,13 @@ class PromptAssembler:
             logger.warning("_render_program_prefill_hint failed: %s", exc)
             return ""
 
-    def _build_stage1_user_prompt(self, frame: KlineFrame, *, analysis_mode: str = "original") -> str:
+    def _build_stage1_user_prompt(
+        self,
+        frame: KlineFrame,
+        *,
+        analysis_mode: str = "original",
+        volume_context: VolumePriceContext | None = None,
+    ) -> str:
         """Build the Stage 1 task turn; stage-specific rules stay out of system."""
         pattern_block = self._stage1_pattern_supplement()
         prefill_hint = self._render_program_prefill_hint(frame)
@@ -1280,6 +1299,10 @@ class PromptAssembler:
             _stage1_output_reminder_for_mode(analysis_mode),
         ]
         stage1_context = "\n\n---\n\n".join(p for p in stage1_parts if p)
+        if volume_context is not None:
+            # The block appears after the static PA rules so it can narrowly
+            # scope the research exception without changing the baseline prompt.
+            stage1_context = f"{stage1_context}\n\n---\n\n{volume_context.to_prompt_block()}"
         kline_table = self._render_kline_table(frame)
         feature_table = self._render_kline_feature_table(frame)
         simple_features_block = self._render_simple_market_features_block(frame)
@@ -1404,6 +1427,7 @@ class PromptAssembler:
         new_bar_count: int,
         *,
         analysis_mode: str = "original",
+        volume_context: VolumePriceContext | None = None,
     ) -> str:
         """Build the incremental continuation user turn (message [3] in 4-message mode).
 
@@ -1416,6 +1440,7 @@ class PromptAssembler:
         simple_features_block = self._render_simple_market_features_block(frame)
         if simple_features_block:
             simple_features_block = _MARKET_FEATURES_AUTHORITY_NOTE + simple_features_block
+        volume_block = volume_context.to_prompt_block() if volume_context is not None else ""
         n_bars = len(frame.bars)
         new_count = max(0, min(new_bar_count, n_bars))
         new_kline_table = self._render_kline_table(frame, limit=new_count)
@@ -1463,6 +1488,7 @@ class PromptAssembler:
             f"与前棒重叠/内包/ioi 以完整表为准)\n\n"
             f"{new_feature_table}\n\n"
             + (f"{simple_features_block}\n\n" if simple_features_block else "")
+            + (f"{volume_block}\n" if volume_block else "")
             + (f"{prefill_hint}\n\n" if prefill_hint else "")
             + "请基于上方完整K线数据、上一轮结论和新增K线，严格输出更新后的阶段一 JSON 诊断结果。\n\n"
             f"{_STAGE1_TAIL_REMINDER}"
@@ -1479,6 +1505,7 @@ class PromptAssembler:
         *,
         decision_stance: str = "conservative",
         historical_stats: dict[str, Any] | None = None,
+        volume_context: VolumePriceContext | None = None,
     ) -> list[dict]:
         """Build a standalone Stage 2 request (kept for tests/tools)."""
         system_content = self._build_stage2_system_prompt()
@@ -1490,6 +1517,7 @@ class PromptAssembler:
             decision_stance=decision_stance,
             enable_next_bar_prediction=False,
             historical_stats=historical_stats,
+            volume_context=volume_context,
         )
         return [
             {"role": "system", "content": system_content},
@@ -1561,6 +1589,7 @@ class PromptAssembler:
         use_prefix_chain: bool | None = None,
         structure_flip_cooldown_bars: int = 3,
         historical_stats: dict[str, Any] | None = None,
+        volume_context: VolumePriceContext | None = None,
     ) -> list[dict]:
         """Build Stage 2 messages, optionally chaining after Stage 1 for KV cache.
 
@@ -1587,6 +1616,7 @@ class PromptAssembler:
             omit_kline_block=chain_after_s1,
             structure_flip_cooldown_bars=structure_flip_cooldown_bars,
             historical_stats=historical_stats,
+            volume_context=volume_context,
         )
 
         if chain_after_s1:
@@ -1618,6 +1648,7 @@ class PromptAssembler:
         omit_kline_block: bool = False,
         structure_flip_cooldown_bars: int = 3,
         historical_stats: dict[str, Any] | None = None,
+        volume_context: VolumePriceContext | None = None,
     ) -> str:
         """Build the Stage 2 task turn for standalone or prefix-chain mode."""
         from pa_agent.ai.decision_continuity import (
@@ -1685,6 +1716,7 @@ class PromptAssembler:
         n_bars = len(frame.bars)
         breakout_tick_hint = format_breakout_tick_hint(frame)
         prev_pred_block = self._render_previous_prediction(previous_record)
+        volume_block = volume_context.to_prompt_block() if volume_context is not None else ""
         compact_s1 = json.dumps(
             self._compact_stage1_for_stage2(stage1_json),
             ensure_ascii=False,
@@ -1740,6 +1772,7 @@ class PromptAssembler:
             f"{compact_s1}"
             f"\n```\n\n"
             f"{kline_block}"
+            f"{volume_block}"
             f"{prev_pred_block + chr(10) if prev_pred_block else ''}"
             f"请根据以上诊断和K线数据,按《二元决策.txt》§3–§11、§14 输出 JSON 决策结果"
             f"(含 decision_trace 与 terminal)。\n"

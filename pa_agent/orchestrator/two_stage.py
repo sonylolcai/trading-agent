@@ -197,6 +197,7 @@ def _emit_buffered_stream(
 def _build_empty_record(
     frame: KlineFrame,
     settings: Optional["Settings"],
+    research_context: dict[str, Any] | None = None,
 ) -> AnalysisRecord:
     """Build a partial AnalysisRecord with meta populated from the frame."""
     ts_ms = now_local_ms()
@@ -261,6 +262,7 @@ def _build_empty_record(
         experience_loaded=[],
         exception=None,
         usage_total={},
+        research_context=dict(research_context or {}),
     )
 
 
@@ -372,6 +374,8 @@ class TwoStageOrchestrator:
         on_stage2_files: Callable[[list[str]], None] | None = None,
         previous_record: AnalysisRecord | None = None,
         incremental_new_bar_count: int | None = None,
+        volume_context: Any | None = None,
+        analysis_variant: str = "price_only",
     ) -> AnalysisRecord:
         """Run the two-stage analysis pipeline and return an AnalysisRecord.
 
@@ -395,7 +399,15 @@ class TwoStageOrchestrator:
             Fully or partially populated record.
         """
         # ── Step 1: Build partial record ──────────────────────────────────────
-        record = _build_empty_record(frame, self._settings)
+        research_context = {
+            "analysis_variant": str(analysis_variant or "price_only"),
+            "volume_context": (
+                volume_context.to_payload()
+                if volume_context is not None and hasattr(volume_context, "to_payload")
+                else None
+            ),
+        }
+        record = _build_empty_record(frame, self._settings, research_context)
 
         # ── Step 2: Pre-Stage-1 cancel check ─────────────────────────────────
         if cancel_token.is_set():
@@ -437,9 +449,14 @@ class TwoStageOrchestrator:
                 incremental_new_bar_count,
                 analysis_mode=analysis_mode,
                 provider_settings=getattr(self._settings, "provider", None),
+                volume_context=volume_context,
             )
         else:
-            messages_s1 = self._assembler.build_stage1(frame, analysis_mode=analysis_mode)
+            messages_s1 = self._assembler.build_stage1(
+                frame,
+                analysis_mode=analysis_mode,
+                volume_context=volume_context,
+            )
 
         # ── Step 5: Call AI for Stage 1 ───────────────────────────────────────
         logger.debug("\n" + "="*80)
@@ -747,6 +764,7 @@ class TwoStageOrchestrator:
             historical_stats=historical_stats,
             provider_settings=getattr(self._settings, "provider", None),
             structure_flip_cooldown_bars=_flip_cooldown,
+            volume_context=volume_context,
         )
 
         # ── Step 15: Call AI for Stage 2 ──────────────────────────────────────

@@ -1,0 +1,1 @@
+put -a "C:/Users/ADMINI~1/AppData/Local/Temp/trading-agent-3650cc1.tail" /tmp/trading-agent-3650cc1.tar.gz

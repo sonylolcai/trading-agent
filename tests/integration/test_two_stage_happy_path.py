@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from pa_agent.ai.volume_context import build_volume_price_context
 from tests.fixtures.validators import schema_test_validator
 from pa_agent.ai.router import route_strategy_files
 from pa_agent.orchestrator.two_stage import TwoStageOrchestrator
@@ -57,3 +58,39 @@ def test_happy_path(frame, pending_writer, assembler, exp_reader):
     # save_full was called (not save_partial)
     pending_writer.save_full.assert_called_once_with(record)
     pending_writer.save_partial.assert_not_called()
+
+
+def test_volume_context_is_forwarded_to_both_full_workflow_stages(
+    frame,
+    pending_writer,
+    assembler,
+    exp_reader,
+):
+    """The research arm uses normal orchestration while carrying one immutable context."""
+    client = MagicMock()
+    client.stream_chat.side_effect = [
+        make_reply(VALID_STAGE1),
+        make_reply(VALID_STAGE2),
+    ]
+    context = build_volume_price_context(frame)
+    orchestrator = TwoStageOrchestrator(
+        client=client,
+        assembler=assembler,
+        router=route_strategy_files,
+        validator=schema_test_validator(),
+        pending_writer=pending_writer,
+        exp_reader=exp_reader,
+    )
+
+    record = orchestrator.submit(
+        frame=frame,
+        cancel_token=CancelToken(),
+        on_event=lambda _event: None,
+        volume_context=context,
+        analysis_variant="volume_assisted",
+    )
+
+    assert assembler.build_stage1.call_args.kwargs["volume_context"] is context
+    assert assembler.build_stage2_continuation.call_args.kwargs["volume_context"] is context
+    assert record.research_context["analysis_variant"] == "volume_assisted"
+    assert record.research_context["volume_context"] == context.to_payload()

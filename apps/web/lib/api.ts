@@ -2,10 +2,13 @@ import type {
   AnalysisStartResponse,
   AnalysisStatusResponse,
   BacktestRebuildResponse,
+  CryptoBacktestRequest,
+  CryptoBacktestResponse,
   DataSourcesResponse,
   KlineCacheResponse,
   MarketSnapshotResponse,
   MarketSelectionRequest,
+  OkxConnectionStatus,
   RecordsResponse,
   RiskProfileRequest,
   RollingBacktestComparisonResponse,
@@ -108,6 +111,13 @@ export const api = {
         window: payload?.window,
       })}`,
     ),
+  okxStatus: () => request<OkxConnectionStatus>('/api/crypto/okx/status'),
+  cryptoBacktest: (payload: CryptoBacktestRequest) =>
+    request<CryptoBacktestResponse>('/api/crypto/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 };
 
 export function analysisEventsUrl(id: string): string {

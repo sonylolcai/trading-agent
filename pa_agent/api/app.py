@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pa_agent.api.context import ApiContext
 from pa_agent.api.routes_analysis import router as analysis_router
 from pa_agent.api.routes_backtest import router as backtest_router
+from pa_agent.api.routes_crypto import router as crypto_router
 from pa_agent.api.routes_market import router as market_router
 from pa_agent.api.routes_records import router as records_router
 from pa_agent.api.routes_settings import router as settings_router
@@ -31,5 +32,6 @@ def create_app(context: ApiContext | None = None) -> FastAPI:
     app.include_router(market_router)
     app.include_router(analysis_router)
     app.include_router(backtest_router)
+    app.include_router(crypto_router)
     app.include_router(records_router)
     return app
