@@ -104,6 +104,10 @@ def _first_metric(row: dict[str, Any], *keys: str) -> float | None:
     return None
 
 
+_VALUATION_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_VALUATION_CACHE_TTL_SEC: float = 300.0
+
+
 def fetch_ashare_valuation_inputs(symbol: str) -> dict[str, Any]:
     """Fetch the minimal live inputs required for one A-share snapshot.
 
@@ -118,13 +122,23 @@ def fetch_ashare_valuation_inputs(symbol: str) -> dict[str, Any]:
     code = _extract_ashare_code(symbol)
     if code is None:
         return {}
-    summary = fetch_valuation_summary(code) or {}
+
+    now = time.time()
+    cached = _VALUATION_CACHE.get(code)
+    if cached is not None and (now - cached[0] < _VALUATION_CACHE_TTL_SEC):
+        return cached[1]
+
+    try:
+        summary = fetch_valuation_summary(code) or {}
+    except Exception:
+        summary = {}
+
     try:
         finance_rows = datacenter_for_symbol("finance_main", code, page_size=1) or []
     except Exception:  # noqa: BLE001 - provider data is best-effort, never an analysis failure
         finance_rows = []
     finance = finance_rows[0] if finance_rows and isinstance(finance_rows[0], dict) else {}
-    return {
+    result = {
         "pe_dynamic": summary.get("pe_dynamic"),
         "pb": summary.get("pb"),
         "total_mv": summary.get("total_mv"),
@@ -136,14 +150,19 @@ def fetch_ashare_valuation_inputs(symbol: str) -> dict[str, Any]:
             finance, "NETPROFIT_YOY_RATIO", "NETPROFIT_YOY", "NET_PROFIT_YOY"
         ),
     }
+    _VALUATION_CACHE[code] = (now, result)
+    return result
 
 
 def _score_valuation(pe: float | None, pb: float | None) -> tuple[str, int | None, list[str]]:
     flags: list[str] = []
     score_parts: list[int] = []
+    is_loss = False
     if pe is not None:
         if pe <= 0:
             flags.append("盈利为负或动态 PE 不适用")
+            score_parts.append(-25)
+            is_loss = True
         elif pe <= 15:
             score_parts.append(20)
         elif pe <= 30:
@@ -155,7 +174,7 @@ def _score_valuation(pe: float | None, pb: float | None) -> tuple[str, int | Non
             flags.append("动态 PE 较高")
     if pb is not None:
         if pb <= 1.2:
-            score_parts.append(15)
+            score_parts.append(0 if is_loss else 15)
         elif pb <= 3:
             score_parts.append(5)
         elif pb <= 6:
@@ -166,7 +185,7 @@ def _score_valuation(pe: float | None, pb: float | None) -> tuple[str, int | Non
     if not score_parts:
         return "unknown", None, flags
     score = max(0, min(100, 50 + sum(score_parts)))
-    level = "cheap" if score >= 65 else "expensive" if score <= 38 else "fair"
+    level = "expensive" if (score <= 38 or is_loss) else "cheap" if score >= 65 else "fair"
     return level, score, flags
 
 

@@ -1,6 +1,7 @@
 """Crypto K-line persistence, caching, and retrieval service."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -105,8 +106,10 @@ def normalize_crypto_timeframe(timeframe: str) -> str:
     return "1d"
 
 
-def _bar_to_chart_dict(bar: KlineBar) -> dict[str, Any]:
+def _bar_to_chart_dict(bar: KlineBar, seq_override: int | None = None) -> dict[str, Any]:
+    seq = seq_override if seq_override is not None else bar.seq
     return {
+        "seq": seq,
         "time": int(bar.ts_open / 1000),  # in seconds for lightweight-charts
         "open": round(bar.open, 6 if bar.open < 10 else 2),
         "high": round(bar.high, 6 if bar.high < 10 else 2),
@@ -134,8 +137,9 @@ def generate_realistic_crypto_bars(
     now_sec = end_ts_sec or int(time.time())
     current_aligned_sec = (now_sec // interval_sec) * interval_sec
 
-    # Deterministic seed per symbol and timeframe so reload stays consistent
-    seed_val = hash(f"{norm_symbol}_{norm_tf}") & 0x7FFFFFFF
+    # Deterministic seed per symbol and timeframe so reload stays consistent across processes
+    seed_bytes = hashlib.md5(f"{norm_symbol}_{norm_tf}".encode("utf-8")).digest()
+    seed_val = int.from_bytes(seed_bytes[:4], byteorder="big") & 0x7FFFFFFF
     rng = random.Random(seed_val)
 
     # Pre-generate price trajectory backwards
@@ -274,7 +278,7 @@ def get_or_fetch_crypto_klines(
             count=len(sliced),
             source="backend_cache",
             saved_at=cached_entry.saved_at,
-            bars=[_bar_to_chart_dict(b) for b in sliced],
+            bars=[_bar_to_chart_dict(b, idx + 1) for idx, b in enumerate(sliced)],
         )
 
     # Need to fetch or generate
@@ -317,7 +321,7 @@ def get_or_fetch_crypto_klines(
         count=len(sliced),
         source=source_name,
         saved_at=saved_at,
-        bars=[_bar_to_chart_dict(b) for b in sliced],
+        bars=[_bar_to_chart_dict(b, idx + 1) for idx, b in enumerate(sliced)],
     )
 
 

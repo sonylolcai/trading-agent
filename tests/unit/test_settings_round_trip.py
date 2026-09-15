@@ -27,13 +27,14 @@ def test_defaults(tmp_path):
     assert p.exists(), "defaults should be written to disk"
 
 
-def test_round_trip(tmp_path):
+def test_round_trip(tmp_path, monkeypatch):
     """save → load preserves all fields."""
     p = tmp_path / "settings.json"
     original = Settings()
     original.provider.api_key = "sk-test-1234"
     original.general.last_symbol = "BTCUSDT"
     save_settings(original, p)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     loaded = load_settings(p)
     assert loaded.provider.api_key == "sk-test-1234"
     # Default source is A-share, so crypto symbols migrate to the A-share default.
@@ -75,15 +76,27 @@ def test_corrupt_json_returns_defaults(tmp_path):
     assert s.provider.model == "deepseek-v4-flash"
 
 
-def test_missing_api_key_leaves_api_key_blank(tmp_path):
+def test_missing_api_key_leaves_api_key_blank(tmp_path, monkeypatch):
     """If api_key is absent, api_key stays empty string."""
     p = tmp_path / "settings.json"
     data = Settings().model_dump()
     data["provider"].pop("api_key", None)
     data["provider"].pop("api_key_encrypted", None)
     p.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     s = load_settings(p)
     assert s.provider.api_key == ""
+
+
+def test_deepseek_environment_key_overrides_persisted_value(tmp_path, monkeypatch):
+    p = tmp_path / "settings.json"
+    settings = Settings()
+    settings.provider.api_key = "stored-key"
+    save_settings(settings, p)
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "environment-key")
+
+    assert load_settings(p).provider.api_key == "environment-key"
 
 
 def test_feishu_round_trip(tmp_path):

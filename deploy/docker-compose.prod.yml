@@ -11,8 +11,15 @@ services:
     restart: unless-stopped
     networks:
       - pa-agent-net
+    env_file:
+      - ../.env
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - OKX_BASE_URL=${OKX_BASE_URL:-https://www.okx.com}
+      - OKX_DEMO_TRADING=${OKX_DEMO_TRADING:-1}
+      - OKX_API_KEY=${OKX_API_KEY:-}
+      - OKX_API_SECRET=${OKX_API_SECRET:-}
+      - OKX_API_PASSPHRASE=${OKX_API_PASSPHRASE:-}
     volumes:
       - pa-agent-config:/app/config
       - pa-agent-logs:/app/logs

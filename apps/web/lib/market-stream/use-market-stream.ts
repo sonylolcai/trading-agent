@@ -46,6 +46,25 @@ export function useMarketStream(initialSymbol = 'BTCUSDT') {
   const bufferTickersRef = useRef<TickerItem[] | null>(null);
   const bufferBookRef = useRef<OrderBookData | null>(null);
   const bufferTradesRef = useRef<TradeItem[]>([]);
+  const throttleRef = useRef<ThrottleRate>(throttle);
+
+  useEffect(() => {
+    throttleRef.current = throttle;
+    if (throttle === 'realtime') {
+      if (bufferTickersRef.current) {
+        setTickers(bufferTickersRef.current);
+        bufferTickersRef.current = null;
+      }
+      if (bufferBookRef.current) {
+        setOrderBook(bufferBookRef.current);
+        bufferBookRef.current = null;
+      }
+      if (bufferTradesRef.current.length > 0) {
+        setTrades((prev) => [...bufferTradesRef.current, ...prev].slice(0, 60));
+        bufferTradesRef.current = [];
+      }
+    }
+  }, [throttle]);
 
   useEffect(() => {
     const engine = new MarketStreamEngine();
@@ -58,7 +77,7 @@ export function useMarketStream(initialSymbol = 'BTCUSDT') {
     setTickers(engine.getTickers());
 
     engine.onTickersUpdate = (updated) => {
-      if (throttle === 'realtime') {
+      if (throttleRef.current === 'realtime') {
         setTickers(updated);
       } else {
         bufferTickersRef.current = updated;
@@ -66,7 +85,7 @@ export function useMarketStream(initialSymbol = 'BTCUSDT') {
     };
 
     engine.onOrderBookUpdate = (book) => {
-      if (throttle === 'realtime') {
+      if (throttleRef.current === 'realtime') {
         setOrderBook(book);
       } else {
         bufferBookRef.current = book;
@@ -74,7 +93,7 @@ export function useMarketStream(initialSymbol = 'BTCUSDT') {
     };
 
     engine.onTradeUpdate = (trade) => {
-      if (throttle === 'realtime') {
+      if (throttleRef.current === 'realtime') {
         setTrades((prev) => [trade, ...prev.slice(0, 59)]);
       } else {
         bufferTradesRef.current.unshift(trade);

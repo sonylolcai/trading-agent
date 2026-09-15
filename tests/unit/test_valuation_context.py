@@ -74,3 +74,21 @@ def test_provider_failure_falls_back_without_analysis_failure() -> None:
     assert context.available is False
     assert context.data_quality == "unavailable"
     assert "回退为价格行为分析" in context.note
+
+
+def test_loss_making_company_is_never_cheap() -> None:
+    context = build_valuation_context(
+        "600999",
+        now_ms=123,
+        fetcher=lambda _symbol: {
+            "pe_dynamic": -12.5,
+            "pb": 0.8,
+            "roe": -5,
+            "debt_to_asset": 78,
+            "net_profit_yoy": -30,
+        },
+    )
+
+    assert context.available is True
+    assert context.valuation_level == "expensive"
+    assert "盈利为负或动态 PE 不适用" in context.risk_flags

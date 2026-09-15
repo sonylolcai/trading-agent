@@ -56,6 +56,9 @@ def test_kline_service_cache_and_retrieval(tmp_path: Path) -> None:
     # Lightweight charts expects strictly ascending time in seconds
     for i in range(1, len(out1.bars)):
         assert out1.bars[i]["time"] > out1.bars[i - 1]["time"]
+        assert out1.bars[i]["seq"] == out1.bars[i - 1]["seq"] + 1
+    assert out1.bars[0]["seq"] == 1
+    assert out1.bars[-1]["seq"] == 500
 
     # Verify persisted file exists on disk
     entry = cache.read("crypto", "BTCUSDT", "1d")
@@ -73,6 +76,8 @@ def test_kline_service_cache_and_retrieval(tmp_path: Path) -> None:
     )
     assert out2.source == "backend_cache"
     assert out2.count == 300
+    assert out2.bars[0]["seq"] == 1
+    assert out2.bars[-1]["seq"] == 300
 
 
 def test_seed_default_crypto_cache(tmp_path: Path) -> None:

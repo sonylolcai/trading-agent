@@ -266,6 +266,9 @@ def load_settings(path: Path | None = None) -> "Settings":
 
     migrated_feishu = _migrate_legacy_feishu_json(raw, path)
     settings = Settings.model_validate(raw)
+    environment_api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if environment_api_key:
+        settings.provider.api_key = environment_api_key
     dirty = migrated_feishu
     if settings.pushplus.enabled and not settings.pushplus.token.strip():
         if not (os.environ.get("PUSHPLUS_TOKEN") or "").strip():
