@@ -1,5 +1,6 @@
 import { StatusChip } from '../../components/status-chip';
 import type { AnalysisDecision } from '../../types/api';
+import { useI18n } from '../../lib/i18n/context';
 
 function readDecisionBody(decision?: AnalysisDecision): Record<string, unknown> | undefined {
   if (!decision) {
@@ -32,8 +33,9 @@ function metric(label: string, value: unknown) {
 }
 
 export function DecisionSummary({ decision }: { decision?: AnalysisDecision }) {
+  const { locale, translateLabel, translateValue } = useI18n();
   if (!decision) {
-    return <div className="empty-state">No Stage 2 decision returned yet.</div>;
+    return <div className="empty-state">{locale === 'zh' ? '暂未返回阶段二决策。' : 'No Stage 2 decision returned yet.'}</div>;
   }
 
   const body = readDecisionBody(decision);
@@ -44,15 +46,15 @@ export function DecisionSummary({ decision }: { decision?: AnalysisDecision }) {
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <div className="toolbar" style={{ justifyContent: 'flex-start' }}>
-        <StatusChip tone={action === 'wait' || action === 'hold' ? 'warn' : 'info'}>{formatValue(action)}</StatusChip>
-        <StatusChip tone={direction ? 'good' : 'neutral'}>{formatValue(direction)}</StatusChip>
-        <StatusChip tone="info">confidence {formatValue(confidence)}</StatusChip>
+        <StatusChip tone={action === 'wait' || action === 'hold' ? 'warn' : 'info'}>{translateValue(formatValue(action))}</StatusChip>
+        <StatusChip tone={direction ? 'good' : 'neutral'}>{direction ? translateValue(formatValue(direction)) : 'n/a'}</StatusChip>
+        <StatusChip tone="info">{locale === 'zh' ? '置信度' : 'confidence'} {formatValue(confidence)}</StatusChip>
       </div>
       <div className="metrics-grid">
-        {metric('Entry', body?.entry ?? body?.entry_price)}
-        {metric('Take profit', body?.take_profit ?? body?.take_profit_price)}
-        {metric('Stop loss', body?.stop_loss ?? body?.stop_loss_price)}
-        {metric('Order type', body?.order_type)}
+        {metric(translateLabel('Entry'), body?.entry ?? body?.entry_price)}
+        {metric(translateLabel('Take profit'), body?.take_profit ?? body?.take_profit_price)}
+        {metric(translateLabel('Stop loss'), body?.stop_loss ?? body?.stop_loss_price)}
+        {metric(translateLabel('Order type'), body?.order_type ? translateValue(String(body.order_type)) : 'n/a')}
       </div>
       {body?.reasoning ? (
         <pre style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
@@ -64,13 +66,14 @@ export function DecisionSummary({ decision }: { decision?: AnalysisDecision }) {
 }
 
 export function DecisionStatsBasis({ decision }: { decision?: AnalysisDecision }) {
+  const { translateLabel } = useI18n();
   const body = readDecisionBody(decision);
   return (
     <div className="metrics-grid">
-      {metric('Win-rate basis', body?.estimated_win_rate_basis)}
-      {metric('Sample count', body?.historical_sample_count)}
-      {metric('Win rate', body?.historical_win_rate_for_this_setup)}
-      {metric('Expectancy R', body?.historical_expectancy_r)}
+      {metric(translateLabel('Win-rate basis'), body?.estimated_win_rate_basis)}
+      {metric(translateLabel('Sample count'), body?.historical_sample_count)}
+      {metric(translateLabel('Win rate'), body?.historical_win_rate_for_this_setup)}
+      {metric(translateLabel('Expectancy R'), body?.historical_expectancy_r)}
     </div>
   );
 }

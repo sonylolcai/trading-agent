@@ -14,8 +14,20 @@ from pa_agent.api.routes_settings import router as settings_router
 
 
 def create_app(context: ApiContext | None = None) -> FastAPI:
+    ctx = context or ApiContext.load()
+
+    # Ensure crypto K-line cache is pre-seeded on startup if empty (zero deployment maintenance)
+    try:
+        from pa_agent.crypto.kline_service import seed_default_crypto_cache
+
+        crypto_dir = ctx.kline_cache.root / "crypto"
+        if not crypto_dir.exists() or not any(crypto_dir.glob("*.json")):
+            seed_default_crypto_cache(ctx.kline_cache, count=1000)
+    except Exception:
+        pass
+
     app = FastAPI(title="IQ Local API")
-    app.state.api_context = context or ApiContext.load()
+    app.state.api_context = ctx
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[

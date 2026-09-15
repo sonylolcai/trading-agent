@@ -45,4 +45,23 @@ describe('api', () => {
       expect.objectContaining({ cache: 'no-store' }),
     );
   });
+
+  it('requests crypto klines with parameters', async () => {
+    const fetchMock = vi.fn(async () => (
+      new Response(JSON.stringify({ symbol: 'BTCUSDT', timeframe: '1d', count: 500, bars: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await api.cryptoKlines({ symbol: 'BTCUSDT', timeframe: '1d', limit: 500 });
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8765/api/crypto/klines?symbol=BTCUSDT&timeframe=1d&limit=500',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
 });
+

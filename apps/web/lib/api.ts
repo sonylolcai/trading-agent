@@ -4,6 +4,7 @@ import type {
   BacktestRebuildResponse,
   CryptoBacktestRequest,
   CryptoBacktestResponse,
+  CryptoKlinesResponse,
   DataSourcesResponse,
   KlineCacheResponse,
   MarketSnapshotResponse,
@@ -118,7 +119,17 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
+  cryptoKlines: (params: { symbol: string; timeframe: string; limit?: number; refresh?: boolean }) =>
+    request<CryptoKlinesResponse>(
+      `/api/crypto/klines${queryString({
+        symbol: params.symbol,
+        timeframe: params.timeframe,
+        limit: params.limit,
+        refresh: params.refresh ? 1 : undefined,
+      })}`,
+    ),
 };
+
 
 export function analysisEventsUrl(id: string): string {
   return `${API_BASE_URL}/api/analysis/${encodeURIComponent(id)}/events`;

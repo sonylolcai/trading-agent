@@ -462,3 +462,23 @@ export type CryptoBacktestResponse = {
     fetched_at: string;
   };
 };
+
+export interface CryptoBarItem {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  amount?: number;
+}
+
+export interface CryptoKlinesResponse {
+  symbol: string;
+  timeframe: string;
+  count: number;
+  source: string;
+  saved_at: string;
+  bars: CryptoBarItem[];
+}
+

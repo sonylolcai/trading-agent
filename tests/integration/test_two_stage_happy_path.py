@@ -7,6 +7,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from pa_agent.ai.volume_context import build_volume_price_context
+from pa_agent.valuation.context import build_valuation_context
 from tests.fixtures.validators import schema_test_validator
 from pa_agent.ai.router import route_strategy_files
 from pa_agent.orchestrator.two_stage import TwoStageOrchestrator
@@ -94,3 +95,37 @@ def test_volume_context_is_forwarded_to_both_full_workflow_stages(
     assert assembler.build_stage2_continuation.call_args.kwargs["volume_context"] is context
     assert record.research_context["analysis_variant"] == "volume_assisted"
     assert record.research_context["volume_context"] == context.to_payload()
+
+
+def test_valuation_context_is_forwarded_and_persisted(
+    frame,
+    pending_writer,
+    assembler,
+    exp_reader,
+):
+    client = MagicMock()
+    client.stream_chat.side_effect = [make_reply(VALID_STAGE1), make_reply(VALID_STAGE2)]
+    context = build_valuation_context(
+        "000001", fetcher=lambda _symbol: {"pe_dynamic": 12, "pb": 1.1}
+    )
+    orchestrator = TwoStageOrchestrator(
+        client=client,
+        assembler=assembler,
+        router=route_strategy_files,
+        validator=schema_test_validator(),
+        pending_writer=pending_writer,
+        exp_reader=exp_reader,
+    )
+
+    record = orchestrator.submit(
+        frame=frame,
+        cancel_token=CancelToken(),
+        on_event=lambda _event: None,
+        valuation_context=context,
+        analysis_variant="price_and_valuation",
+    )
+
+    assert assembler.build_stage1.call_args.kwargs["valuation_context"] is context
+    assert assembler.build_stage2_continuation.call_args.kwargs["valuation_context"] is context
+    assert record.research_context["analysis_variant"] == "price_and_valuation"
+    assert record.research_context["valuation_context"] == context.to_payload()

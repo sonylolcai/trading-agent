@@ -42,6 +42,135 @@ export type Dictionary = {
   klineSnapshot: string;
   collapse: string;
   expand: string;
+  liveStream: string;
+  tickerMatrix: string;
+  orderBook: string;
+  tradeTape: string;
+  throughput: string;
+  latency: string;
+  whaleAlert: string;
+
+  // Nav items & shell
+  navTerminal: string;
+  navLive: string;
+  navCrypto: string;
+  navHistory: string;
+  navBacktest: string;
+  brandSubtitle: string;
+  coreNode: string;
+  worldFinancialTime: string;
+  quickPresets: string;
+  copy: string;
+  copied: string;
+  noCachedKline: string;
+
+  // Rolling backtest
+  rollingBacktestTitle: string;
+  rollingBacktestWarming: string;
+  evaluatedWindows: string;
+  tradeSignals: string;
+  completedTrades: string;
+  winRate: string;
+  expectancyR: string;
+  totalR: string;
+  maxDrawdown: string;
+  profitFactor: string;
+  rollingEmpty: string;
+  thDirection: string;
+  thOrder: string;
+  thEntry: string;
+  thStopLoss: string;
+  thTakeProfit: string;
+  thStatus: string;
+  thRPnL: string;
+  thBarsHeld: string;
+
+  // History Page
+  historyTitle: string;
+  historySub: string;
+  historySearchPlaceholder: string;
+  historyAll: string;
+  historyEmpty: string;
+  historyNoMatch: string;
+  historyThreshold: string;
+  historyFullReport: string;
+
+  // Backtest Page
+  backtestTitle: string;
+  backtestSub: string;
+  rebuild: string;
+  rebuilding: string;
+  totalSamples: string;
+  uniqueSetups: string;
+  aggregateWinRate: string;
+  winsLosses: string;
+  cumulativeTotalR: string;
+  acrossAllSetups: string;
+  weightedExpectancy: string;
+  avgPerTrade: string;
+  searchSetupPlaceholder: string;
+  showingSetups: string;
+  setupsCount: string;
+  priceVsVolume: string;
+  priceVsVolumeSub: string;
+  volumeConfirmedTitle: string;
+  volumeConfirmedDesc: string;
+  timeExitTitle: string;
+  timeExitDesc: string;
+  volumeAuditTitle: string;
+  volumeAuditDesc: string;
+  metricLabel: string;
+  priceOnly: string;
+  volumeAssisted: string;
+  deltaLabel: string;
+  confirmedOnly: string;
+  confirmedFixed: string;
+  confirmedTime: string;
+  contextLabel: string;
+  signalsLabel: string;
+  completedLabel: string;
+
+  // Live stream & components
+  bidDepth: string;
+  askDepth: string;
+  spread: string;
+  cumDepth: string;
+  buyFlow: string;
+  sellFlow: string;
+  amountBuckets: string;
+  whaleTrades: string;
+  h24Volume: string;
+  h24Change: string;
+  runtimeHud: string;
+  mainThreadFps: string;
+  eventLoopDrill: string;
+  jsHeap: string;
+  dropFrameRate: string;
+  drilldownIntraday: string;
+  returnToMacro: string;
+  presetAll: string;
+  preset3M: string;
+  preset1M: string;
+  preset7D: string;
+  geekHotkeys: string;
+  hotkeyTimeframe: string;
+  hotkeyPauseResume: string;
+  hotkeyTimeBrush: string;
+  hotkeyCopyPrice: string;
+  spaceKey: string;
+  dragTimeline: string;
+  clickOrderPrice: string;
+  activeSymbol: string;
+  dataSource: string;
+  throttleRate: string;
+  whaleThresholdLabel: string;
+  searchSymbol: string;
+  clickToSwitch: string;
+  trendColumn: string;
+  volumeColumn: string;
+  priceRangeColumn: string;
+  change24hColumn: string;
+  symbolColumn: string;
 };
 
 export const DICTIONARY: Record<Locale, Dictionary> = {
@@ -86,6 +215,135 @@ export const DICTIONARY: Record<Locale, Dictionary> = {
     klineSnapshot: 'K线快照',
     collapse: '收起',
     expand: '展开',
+    liveStream: '实时盘口',
+    tickerMatrix: '全币种行情矩阵',
+    orderBook: 'L2 深度订单簿',
+    tradeTape: '逐笔成交流水',
+    throughput: '吞吐率',
+    latency: '延迟',
+    whaleAlert: '大单警报',
+
+    // Nav & Shell
+    navTerminal: '量化终端',
+    navLive: '实时盘口',
+    navCrypto: '加密实验室',
+    navHistory: '历史审计',
+    navBacktest: '策略回测',
+    brandSubtitle: 'PA 量化引擎',
+    coreNode: '核心节点 01',
+    worldFinancialTime: '全球金融时区',
+    quickPresets: '快速标的预设',
+    copy: '复制',
+    copied: '已复制',
+    noCachedKline: '暂无缓存 K 线数据。',
+
+    // Rolling Backtest
+    rollingBacktestTitle: '100根K线滚动回测',
+    rollingBacktestWarming: '滚动回测 API 正在预热',
+    evaluatedWindows: '评估窗口数',
+    tradeSignals: '交易信号',
+    completedTrades: '完成交易',
+    winRate: '胜率',
+    expectancyR: '期望R',
+    totalR: '总R',
+    maxDrawdown: '最大回撤',
+    profitFactor: '盈亏比',
+    rollingEmpty: '当前窗口未触发可执行交易；可能是策略等待确认，或没有低风险入场点。',
+    thDirection: '方向',
+    thOrder: '订单',
+    thEntry: '入场',
+    thStopLoss: '止损',
+    thTakeProfit: '止盈',
+    thStatus: '状态',
+    thRPnL: 'R 盈亏',
+    thBarsHeld: '持仓K数',
+
+    // History Page
+    historyTitle: '分析审计记录',
+    historySub: '条本地待处理账本记录',
+    historySearchPlaceholder: '按标的或动作搜索 (如 000001, BTC)...',
+    historyAll: '全部',
+    historyEmpty: '暂无分析记录。',
+    historyNoMatch: '无匹配的历史记录。',
+    historyThreshold: '阈值',
+    historyFullReport: '完整分析报告',
+
+    // Backtest Page
+    backtestTitle: 'Setup 策略形态统计',
+    backtestSub: '组本地账本形态统计',
+    rebuild: '重建统计',
+    rebuilding: '重建中',
+    totalSamples: '总样本覆盖',
+    uniqueSetups: '组独立形态',
+    aggregateWinRate: '综合胜率',
+    winsLosses: '胜 / 负',
+    cumulativeTotalR: '累计总收益',
+    acrossAllSetups: '全形态历史总和',
+    weightedExpectancy: '加权期望收益',
+    avgPerTrade: '每笔交易平均期望',
+    searchSetupPlaceholder: '搜索 Setup 策略形态 (如 bull_flag, pinbar)...',
+    showingSetups: '显示',
+    setupsCount: '组',
+    priceVsVolume: '价格行为 vs 硬成交量过滤器',
+    priceVsVolumeSub: '基于相同缓存K线、风险档位、出入场规则与模拟撮合。',
+    volumeConfirmedTitle: '成交量确认候选方案',
+    volumeConfirmedDesc: '仅供量化研究：仅当成交量与收盘强度共同确认突破时才保留价格信号。',
+    timeExitTitle: '10根K线时间止损基准',
+    timeExitDesc: '仅供量化研究基准：采用相同成交量确认入场与初始止损；若10根K线未触及止损止盈，则按收盘价退出。',
+    volumeAuditTitle: '成交量环境审计',
+    volumeAuditDesc: '所有价格行为信号在此审计统计；环境标签不影响入场、出场与仓位管理。',
+    metricLabel: '指标',
+    priceOnly: '纯价格',
+    volumeAssisted: '成交量辅助',
+    deltaLabel: '差值 (Delta)',
+    confirmedOnly: '仅确认',
+    confirmedFixed: '确认固定出场',
+    confirmedTime: '确认时间出场',
+    contextLabel: '环境',
+    signalsLabel: '信号数',
+    completedLabel: '完成数',
+
+    // Live stream & components
+    bidDepth: '买盘累计',
+    askDepth: '卖盘累计',
+    spread: '买卖价差',
+    cumDepth: '累计深度',
+    buyFlow: '买盘优势',
+    sellFlow: '卖盘优势',
+    amountBuckets: '金额分箱',
+    whaleTrades: '巨鲸大单',
+    h24Volume: '24h 成交额',
+    h24Change: '24h 涨跌幅',
+    runtimeHud: '运行时性能监视器',
+    mainThreadFps: '主线程 FPS',
+    eventLoopDrill: '事件循环延迟',
+    jsHeap: '堆内存占用',
+    dropFrameRate: '丢帧率',
+    drilldownIntraday: '瞬间下钻单日分时 (15m)',
+    returnToMacro: '返回多月宏观 (1D)',
+    presetAll: '全部 (All)',
+    preset3M: '近3个月 (3M)',
+    preset1M: '近1个月 (1M)',
+    preset7D: '近7天 (7D)',
+    geekHotkeys: '极客快捷操作',
+    hotkeyTimeframe: '秒切周期 (1m / 15m / 30m / 1h / 4h / 1D)',
+    hotkeyPauseResume: '流推送暂停/继续',
+    hotkeyTimeBrush: '宏微时间笔刷下钻',
+    hotkeyCopyPrice: '复制委托价格',
+    spaceKey: 'Space 空格',
+    dragTimeline: '拖拽微缩轴',
+    clickOrderPrice: '点击盘口价',
+    activeSymbol: '当前标的',
+    dataSource: '数据源',
+    throttleRate: '渲染采样',
+    whaleThresholdLabel: '大单阈值 (U)',
+    searchSymbol: '搜索代码...',
+    clickToSwitch: '点击切换至',
+    trendColumn: '走势',
+    volumeColumn: '成交量',
+    priceRangeColumn: '最新价 / 24h区间',
+    change24hColumn: '24h 涨跌',
+    symbolColumn: '标的',
   },
   en: {
     language: 'Language',
@@ -128,6 +386,135 @@ export const DICTIONARY: Record<Locale, Dictionary> = {
     klineSnapshot: 'K-line Snapshot',
     collapse: 'Collapse',
     expand: 'Expand',
+    liveStream: 'Live Stream',
+    tickerMatrix: 'Ticker Matrix',
+    orderBook: 'L2 Order Book',
+    tradeTape: 'Trade Tape',
+    throughput: 'Throughput',
+    latency: 'Latency',
+    whaleAlert: 'Whale Alert',
+
+    // Nav & Shell
+    navTerminal: 'Terminal',
+    navLive: 'Live Stream',
+    navCrypto: 'Crypto Lab',
+    navHistory: 'History',
+    navBacktest: 'Backtest',
+    brandSubtitle: 'PA QUANT ENGINE',
+    coreNode: 'CORE NODE 01',
+    worldFinancialTime: 'World Financial Time',
+    quickPresets: 'Quick Presets',
+    copy: 'Copy',
+    copied: 'Copied',
+    noCachedKline: 'No cached K-line frame available.',
+
+    // Rolling Backtest
+    rollingBacktestTitle: '100-Bar Rolling Backtest',
+    rollingBacktestWarming: 'Rolling backtest API is warming up',
+    evaluatedWindows: 'Evaluated Windows',
+    tradeSignals: 'Trade Signals',
+    completedTrades: 'Completed Trades',
+    winRate: 'Win Rate',
+    expectancyR: 'Expectancy R',
+    totalR: 'Total R',
+    maxDrawdown: 'Max Drawdown',
+    profitFactor: 'Profit Factor',
+    rollingEmpty: 'No executable trades triggered in current window; strategy may be waiting for confirmation or low-risk entry.',
+    thDirection: 'Direction',
+    thOrder: 'Order',
+    thEntry: 'Entry',
+    thStopLoss: 'Stop Loss',
+    thTakeProfit: 'Take Profit',
+    thStatus: 'Status',
+    thRPnL: 'R PnL',
+    thBarsHeld: 'Bars Held',
+
+    // History Page
+    historyTitle: 'Analysis Records',
+    historySub: 'records from local pending store',
+    historySearchPlaceholder: 'Search symbol or action (e.g. 000001, BTC)...',
+    historyAll: 'All',
+    historyEmpty: 'No analysis records returned.',
+    historyNoMatch: 'No records match the current filter.',
+    historyThreshold: 'Threshold',
+    historyFullReport: 'Complete Analysis Report',
+
+    // Backtest Page
+    backtestTitle: 'Setup Statistics',
+    backtestSub: 'setup buckets from local stats ledger',
+    rebuild: 'Rebuild',
+    rebuilding: 'Rebuilding',
+    totalSamples: 'Total Samples',
+    uniqueSetups: 'unique setups',
+    aggregateWinRate: 'Aggregate Win Rate',
+    winsLosses: 'W / L',
+    cumulativeTotalR: 'Cumulative Total R',
+    acrossAllSetups: 'Across all setups',
+    weightedExpectancy: 'Weighted Expectancy',
+    avgPerTrade: 'Avg expectancy per trade',
+    searchSetupPlaceholder: 'Search setup key (e.g. bull_flag, pinbar)...',
+    showingSetups: 'Showing',
+    setupsCount: 'setups',
+    priceVsVolume: 'Price Action vs Hard Volume Filter',
+    priceVsVolumeSub: 'Same cached K-lines, risk profile, entries, stops, targets, and simulator.',
+    volumeConfirmedTitle: 'Volume-Confirmed Candidate',
+    volumeConfirmedDesc: 'Research-only: keeps price signals only when volume and closing strength confirm the breakout.',
+    timeExitTitle: '10-Bar Time-Exit Benchmark',
+    timeExitDesc: 'Research-only benchmark: uses volume-confirmed entries and initial stops; if neither stop nor target is hit, exits at bar 10 close.',
+    volumeAuditTitle: 'Volume Context Audit',
+    volumeAuditDesc: 'Every price-action signal is measured here; these labels do not alter entries, exits, or position size.',
+    metricLabel: 'Metric',
+    priceOnly: 'Price only',
+    volumeAssisted: 'Volume assisted',
+    deltaLabel: 'Delta',
+    confirmedOnly: 'Confirmed only',
+    confirmedFixed: 'Confirmed fixed exit',
+    confirmedTime: 'Confirmed time exit',
+    contextLabel: 'Context',
+    signalsLabel: 'Signals',
+    completedLabel: 'Completed',
+
+    // Live stream & components
+    bidDepth: 'Bids Depth',
+    askDepth: 'Asks Depth',
+    spread: 'Spread',
+    cumDepth: 'Cumulative Depth',
+    buyFlow: 'Buy Flow',
+    sellFlow: 'Sell Flow',
+    amountBuckets: 'Amount Buckets',
+    whaleTrades: 'Whale Trades',
+    h24Volume: '24h Volume',
+    h24Change: '24h Change',
+    runtimeHud: 'Runtime Engine HUD',
+    mainThreadFps: 'Main Thread FPS',
+    eventLoopDrill: 'Event Loop Drift',
+    jsHeap: 'JS Heap Memory',
+    dropFrameRate: 'Dropped Frames',
+    drilldownIntraday: 'Drilldown Intraday (15m)',
+    returnToMacro: 'Return to Macro (1D)',
+    presetAll: 'All',
+    preset3M: '3M',
+    preset1M: '1M',
+    preset7D: '7D',
+    geekHotkeys: 'Geek Shortcuts',
+    hotkeyTimeframe: 'Switch timeframe (1m - 1D)',
+    hotkeyPauseResume: 'Pause / resume stream',
+    hotkeyTimeBrush: 'Time-range brush drilldown',
+    hotkeyCopyPrice: 'Copy order price',
+    spaceKey: 'Space',
+    dragTimeline: 'Drag timeline',
+    clickOrderPrice: 'Click order price',
+    activeSymbol: 'Active Symbol',
+    dataSource: 'Data Source',
+    throttleRate: 'Throttle',
+    whaleThresholdLabel: 'Whale Alert (U)',
+    searchSymbol: 'Search symbol...',
+    clickToSwitch: 'Click to switch to',
+    trendColumn: 'Trend',
+    volumeColumn: 'Volume',
+    priceRangeColumn: 'Last Price / 24h Range',
+    change24hColumn: '24h Change',
+    symbolColumn: 'Symbol',
   },
 };
 
@@ -152,6 +539,7 @@ const TERMS: Term[] = [
   { zh: '历史胜率', en: 'Historical win rate', aliases: ['historical win rate', '历史胜率'] },
   { zh: '样本数', en: 'Samples', aliases: ['samples', 'sample count', 'historical samples', '历史样本', '样本数'] },
   { zh: '历史期望R', en: 'Expectancy R', aliases: ['expectancy r', 'historical expectancy r', '历史期望r'] },
+  { zh: '胜率基准', en: 'Win-rate basis', aliases: ['win-rate basis', 'win_rate_basis', '胜率基准'] },
   { zh: '订单类型', en: 'Order type', aliases: ['order type', '订单类型'] },
   { zh: '入场价', en: 'Entry', aliases: ['entry', 'entry price', '入场价'] },
   { zh: '止损价', en: 'Stop loss', aliases: ['stop loss', 'stop loss price', '止损价'] },

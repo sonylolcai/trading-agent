@@ -375,6 +375,7 @@ class TwoStageOrchestrator:
         previous_record: AnalysisRecord | None = None,
         incremental_new_bar_count: int | None = None,
         volume_context: Any | None = None,
+        valuation_context: Any | None = None,
         analysis_variant: str = "price_only",
     ) -> AnalysisRecord:
         """Run the two-stage analysis pipeline and return an AnalysisRecord.
@@ -404,6 +405,11 @@ class TwoStageOrchestrator:
             "volume_context": (
                 volume_context.to_payload()
                 if volume_context is not None and hasattr(volume_context, "to_payload")
+                else None
+            ),
+            "valuation_context": (
+                valuation_context.to_payload()
+                if valuation_context is not None and hasattr(valuation_context, "to_payload")
                 else None
             ),
         }
@@ -450,12 +456,14 @@ class TwoStageOrchestrator:
                 analysis_mode=analysis_mode,
                 provider_settings=getattr(self._settings, "provider", None),
                 volume_context=volume_context,
+                valuation_context=valuation_context,
             )
         else:
             messages_s1 = self._assembler.build_stage1(
                 frame,
                 analysis_mode=analysis_mode,
                 volume_context=volume_context,
+                valuation_context=valuation_context,
             )
 
         # ── Step 5: Call AI for Stage 1 ───────────────────────────────────────
@@ -765,6 +773,7 @@ class TwoStageOrchestrator:
             provider_settings=getattr(self._settings, "provider", None),
             structure_flip_cooldown_bars=_flip_cooldown,
             volume_context=volume_context,
+            valuation_context=valuation_context,
         )
 
         # ── Step 15: Call AI for Stage 2 ──────────────────────────────────────

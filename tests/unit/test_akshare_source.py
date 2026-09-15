@@ -6,6 +6,11 @@ from pa_agent.data.akshare_source import (
     is_index_symbol,
     normalize_ashare_symbol,
 )
+from pa_agent.data.akshare_source import _row_time_to_ts_ms
+
+
+def test_row_time_parser_accepts_full_minute_timestamp() -> None:
+    assert _row_time_to_ts_ms("2026-01-02 09:30") == 1767317400000
 
 
 def test_normalize_ashare_symbol_stock():

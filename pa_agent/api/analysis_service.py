@@ -155,6 +155,7 @@ def default_analysis_runner(
     from pa_agent.orchestrator.two_stage import TwoStageOrchestrator
     from pa_agent.records.experience_reader import ExperienceReader
     from pa_agent.records.pending_writer import PendingWriter
+    from pa_agent.valuation.context import build_valuation_context
 
     settings = load_settings(SETTINGS_JSON_PATH)
     experience_reader = ExperienceReader(experience_dir=EXPERIENCE_DIR)
@@ -175,6 +176,7 @@ def default_analysis_runner(
         settings=settings,
     )
     content_buffer = StructuredContentBuffer()
+    valuation_context = build_valuation_context(frame.symbol)
     record = orchestrator.submit(
         frame,
         cancel_token,
@@ -196,6 +198,8 @@ def default_analysis_runner(
             }
         ),
         on_stage2_files=lambda files: emit({"type": "stage2_files", "files": files}),
+        valuation_context=valuation_context,
+        analysis_variant="price_and_valuation" if valuation_context.available else "price_only",
     )
     content_buffer.finish(emit)
     return record

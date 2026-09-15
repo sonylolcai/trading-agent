@@ -57,6 +57,12 @@ def test_forming_bar_has_closed_when_ts_changes() -> None:
     assert forming_bar_has_closed(waited, after, "5m", now_ms=now_ms)
 
 
+def test_forming_bar_has_closed_uses_time_when_fetch_returns_no_bars() -> None:
+    waited = 1_000_000
+    assert not forming_bar_has_closed(waited, [], "5m", now_ms=waited + 299_999)
+    assert forming_bar_has_closed(waited, [], "5m", now_ms=waited + 300_000)
+
+
 def test_stale_unclosed_flag_after_bar_period_not_forming() -> None:
     """TradingView-style closed=False but bar period ended → treat as closed."""
     ts_open = 1_700_000_000_000

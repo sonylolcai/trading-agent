@@ -10,6 +10,7 @@ from unittest.mock import patch, MagicMock
 from pa_agent.ai.prompt_assembler import PromptAssembler
 from pa_agent.ai.volume_context import build_volume_price_context
 from pa_agent.data.base import KlineBar, KlineFrame, IndicatorBundle
+from pa_agent.valuation.context import build_valuation_context
 
 
 def _make_frame(n: int = 5) -> KlineFrame:
@@ -360,6 +361,25 @@ def test_volume_research_context_is_opt_in_for_both_full_stage_prompts(
     assert "量价辅助上下文" not in baseline_stage1
     assert "量价辅助上下文" in volume_stage1
     assert "量价辅助上下文" in volume_stage2
+
+
+def test_valuation_context_is_attached_to_both_full_stage_prompts(
+    assembler: PromptAssembler,
+) -> None:
+    frame = _make_frame(25)
+    context = build_valuation_context(
+        "000001",
+        fetcher=lambda _symbol: {"pe_dynamic": 12, "pb": 1.1},
+    )
+
+    stage1 = assembler.build_stage1(frame, valuation_context=context)[1]["content"]
+    stage2 = assembler.build_stage2(
+        frame, {}, [], [], valuation_context=context
+    )[1]["content"]
+
+    assert "价值快照" in stage1
+    assert "价值快照" in stage2
+    assert "不能单独否决或建立交易" in stage2
 
 
 def test_stage2_message_roles(assembler: PromptAssembler):

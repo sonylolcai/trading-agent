@@ -1,7 +1,24 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Database, DownloadCloud, Play, RefreshCw, Save, Square } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Database,
+  DownloadCloud,
+  Layers,
+  Play,
+  RefreshCw,
+  Save,
+  Square,
+  Terminal as TerminalIcon,
+  Zap,
+} from 'lucide-react';
 import { AppShell } from '../../components/app-shell';
 import { StatusChip } from '../../components/status-chip';
 import { analysisEventsUrl, api, type ApiResult } from '../../lib/api';
@@ -57,11 +74,11 @@ const emptyMarketSelection: MarketSelection = {
   timeframe: '',
 };
 
-const riskProfileOptions: Array<{ value: RiskProfile; label: string }> = [
-  { value: 'conservative', label: '稳健' },
-  { value: 'balanced', label: '均衡' },
-  { value: 'aggressive', label: '进取' },
-  { value: 'extreme_aggressive', label: '强进取' },
+const riskProfileOptions: Array<{ value: RiskProfile; label: string; enLabel: string }> = [
+  { value: 'conservative', label: '稳健', enLabel: 'Conservative' },
+  { value: 'balanced', label: '均衡', enLabel: 'Balanced' },
+  { value: 'aggressive', label: '进取', enLabel: 'Aggressive' },
+  { value: 'extreme_aggressive', label: '强进取', enLabel: 'Extreme' },
 ];
 
 const emptyStream: StreamText = emptyStreamText;
@@ -131,16 +148,58 @@ function StreamPane({
   contentPending: boolean;
   contentComplete: boolean;
 }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
   const display = streamPaneDisplay({ reasoning, content, bufferedContent, contentPending, contentComplete });
+  const isStreaming = !contentComplete && (Boolean(content) || Boolean(reasoning) || contentPending);
+
+  const handleCopy = async () => {
+    if (!display.body) return;
+    try {
+      await navigator.clipboard.writeText(display.body);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore clipboard error
+    }
+  };
+
   return (
-    <div style={{ minWidth: 0 }}>
-      <div className="panel__header">
-        <h3 style={{ margin: 0, fontSize: 13 }}>{title}</h3>
-        <StatusChip tone={display.tone}>{contentPending ? 'buffering' : contentComplete ? 'ready' : content || reasoning ? 'stream' : 'idle'}</StatusChip>
+    <div className="stream-pane-container">
+      <div className="stream-pane-header">
+        <div className="stream-pane-title-group">
+          <div className="stream-pane-dots">
+            <span className="dot dot--red" />
+            <span className="dot dot--amber" />
+            <span className="dot dot--green" />
+          </div>
+          <TerminalIcon size={13} className="text-muted" />
+          <h3 className="stream-pane-title">{title}</h3>
+        </div>
+        <div className="stream-pane-actions">
+          <StatusChip tone={display.tone} animated={isStreaming}>
+            {contentPending ? 'buffering' : contentComplete ? 'ready' : isStreaming ? 'stream' : 'idle'}
+          </StatusChip>
+          {display.body && (
+            <button
+              className="stream-copy-btn"
+              type="button"
+              onClick={handleCopy}
+              title={t.copy}
+              aria-label="Copy stream output"
+            >
+              {copied ? <Check size={12} className="text-good" /> : <Copy size={12} />}
+              <span>{copied ? t.copied : t.copy}</span>
+            </button>
+          )}
+        </div>
       </div>
-      <pre style={{ minHeight: 128, margin: '8px 0 0', overflow: 'auto', whiteSpace: 'pre-wrap', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-        {display.body}
-      </pre>
+      <div className="stream-pane-body-wrap">
+        <pre className="stream-pane-code">
+          {display.body}
+          {isStreaming && <span className="stream-cursor">▋</span>}
+        </pre>
+      </div>
     </div>
   );
 }
@@ -166,17 +225,30 @@ function formatR(value: number | null | undefined): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}R`;
 }
 
-function translateDirection(value: string): string {
-  if (value === '做多' || value.toLowerCase() === 'long') {
-    return '做多';
+function translateDirection(value: string, locale: 'zh' | 'en' = 'zh'): string {
+  const isLong = value === '做多' || value.toLowerCase() === 'long';
+  const isShort = value === '做空' || value.toLowerCase() === 'short';
+  if (isLong) {
+    return locale === 'en' ? 'Long' : '做多';
   }
-  if (value === '做空' || value.toLowerCase() === 'short') {
-    return '做空';
+  if (isShort) {
+    return locale === 'en' ? 'Short' : '做空';
   }
   return value || 'n/a';
 }
 
-function translateStatus(value: string): string {
+function translateStatus(value: string, locale: 'zh' | 'en' = 'zh'): string {
+  if (locale === 'en') {
+    const mapEn: Record<string, string> = {
+      win: 'Take Profit',
+      loss: 'Stop Loss',
+      open: 'In Position',
+      not_triggered: 'Not Triggered',
+      invalid: 'Invalid',
+      skipped: 'Skipped',
+    };
+    return mapEn[value] ?? value;
+  }
   const map: Record<string, string> = {
     win: '止盈',
     loss: '止损',
@@ -188,16 +260,30 @@ function translateStatus(value: string): string {
   return map[value] ?? value;
 }
 
-function RollingMetricCard({ label, value, tone = 'neutral' }: { label: string; value: string | number; tone?: 'good' | 'warn' | 'bad' | 'info' | 'neutral' }) {
+function RollingMetricCard({
+  label,
+  value,
+  tone = 'neutral',
+  subtitle,
+}: {
+  label: string;
+  value: string | number;
+  tone?: 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+  subtitle?: string;
+}) {
   return (
     <div className={`rolling-backtest__metric rolling-backtest__metric--${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <div className="metric-card-top">
+        <span className="metric-label">{label}</span>
+      </div>
+      <strong className="metric-value">{value}</strong>
+      {subtitle && <span className="metric-sub">{subtitle}</span>}
     </div>
   );
 }
 
 function RollingBacktestDashboard({ result }: { result: ApiResult<RollingBacktestResponse> | null }) {
+  const { t, locale } = useI18n();
   const data = result?.ok ? result.data : null;
   const tradeRows = data?.trades ?? [];
   const hasSignals = Boolean(data && data.trade_signals > 0);
@@ -205,14 +291,14 @@ function RollingBacktestDashboard({ result }: { result: ApiResult<RollingBacktes
   const profile = data?.risk_profile ?? 'n/a';
 
   return (
-    <section className="rolling-backtest" aria-label="100根K线滚动回测">
+    <section className="rolling-backtest" aria-label={t.rollingBacktestTitle}>
       <div className="rolling-backtest__head">
         <div>
-          <h3>100根K线滚动回测</h3>
+          <h3>{t.rollingBacktestTitle}</h3>
           <p>
             {data
               ? `${data.symbol} ${data.timeframe} / ${data.bar_count} bars / ${data.evaluated_windows} windows / ${profile}`
-              : 'Rolling backtest API is warming up'}
+              : t.rollingBacktestWarming}
           </p>
         </div>
         <StatusChip tone={statusTone}>{data ? 'dashboard' : result ? 'offline' : 'loading'}</StatusChip>
@@ -221,24 +307,24 @@ function RollingBacktestDashboard({ result }: { result: ApiResult<RollingBacktes
       {result && !result.ok ? (
         <div className="error-block">
           <AlertTriangle size={16} aria-hidden="true" />
-          <span>Rolling backtest API is warming up: {result.error}</span>
+          <span>{t.rollingBacktestWarming}: {result.error}</span>
         </div>
       ) : null}
 
       <div className="rolling-backtest__metrics">
-        <RollingMetricCard label="评估窗口数" value={data?.evaluated_windows ?? 0} tone="info" />
-        <RollingMetricCard label="交易信号" value={data?.trade_signals ?? 0} tone={hasSignals ? 'good' : 'neutral'} />
-        <RollingMetricCard label="完成交易" value={data?.completed_trades ?? 0} tone={data?.completed_trades ? 'good' : 'neutral'} />
-        <RollingMetricCard label="胜率" value={formatPercent(data?.win_rate_pct)} tone={(data?.win_rate_pct ?? 0) >= 50 ? 'good' : 'warn'} />
-        <RollingMetricCard label="期望R" value={formatR(data?.expectancy_r)} tone={(data?.expectancy_r ?? 0) > 0 ? 'good' : 'warn'} />
-        <RollingMetricCard label="总R" value={formatR(data?.total_r)} tone={(data?.total_r ?? 0) > 0 ? 'good' : 'warn'} />
-        <RollingMetricCard label="最大回撤" value={formatR(data?.max_drawdown_r ? -Math.abs(data.max_drawdown_r) : 0)} tone={(data?.max_drawdown_r ?? 0) > 0 ? 'warn' : 'neutral'} />
-        <RollingMetricCard label="Profit Factor" value={formatCompactNumber(data?.profit_factor)} tone={(data?.profit_factor ?? 0) >= 1 ? 'good' : 'neutral'} />
+        <RollingMetricCard label={t.evaluatedWindows} value={data?.evaluated_windows ?? 0} tone="info" subtitle="Windows" />
+        <RollingMetricCard label={t.tradeSignals} value={data?.trade_signals ?? 0} tone={hasSignals ? 'good' : 'neutral'} subtitle="Signals" />
+        <RollingMetricCard label={t.completedTrades} value={data?.completed_trades ?? 0} tone={data?.completed_trades ? 'good' : 'neutral'} subtitle="Trades" />
+        <RollingMetricCard label={t.winRate} value={formatPercent(data?.win_rate_pct)} tone={(data?.win_rate_pct ?? 0) >= 50 ? 'good' : 'warn'} subtitle="Win Rate" />
+        <RollingMetricCard label={t.expectancyR} value={formatR(data?.expectancy_r)} tone={(data?.expectancy_r ?? 0) > 0 ? 'good' : 'warn'} subtitle="Expectancy" />
+        <RollingMetricCard label={t.totalR} value={formatR(data?.total_r)} tone={(data?.total_r ?? 0) > 0 ? 'good' : 'warn'} subtitle="Cumulative R" />
+        <RollingMetricCard label={t.maxDrawdown} value={formatR(data?.max_drawdown_r ? -Math.abs(data.max_drawdown_r) : 0)} tone={(data?.max_drawdown_r ?? 0) > 0 ? 'warn' : 'neutral'} subtitle="Max DD" />
+        <RollingMetricCard label={t.profitFactor} value={formatCompactNumber(data?.profit_factor)} tone={(data?.profit_factor ?? 0) >= 1 ? 'good' : 'neutral'} subtitle="PF Ratio" />
       </div>
 
       {data && !hasSignals ? (
         <div className="rolling-backtest__empty">
-          当前窗口未触发可执行交易；可能是策略等待确认，或没有低风险入场点。
+          {t.rollingEmpty}
         </div>
       ) : null}
 
@@ -247,29 +333,48 @@ function RollingBacktestDashboard({ result }: { result: ApiResult<RollingBacktes
           <table className="rolling-backtest__table">
             <thead>
               <tr>
-                <th>方向</th>
-                <th>订单</th>
-                <th>入场</th>
-                <th>止损</th>
-                <th>止盈</th>
-                <th>状态</th>
-                <th>R</th>
-                <th>持仓K数</th>
+                <th>{t.thDirection}</th>
+                <th>{t.thOrder}</th>
+                <th>{t.thEntry}</th>
+                <th>{t.thStopLoss}</th>
+                <th>{t.thTakeProfit}</th>
+                <th>{t.thStatus}</th>
+                <th>{t.thRPnL}</th>
+                <th>{t.thBarsHeld}</th>
               </tr>
             </thead>
             <tbody>
-              {tradeRows.slice(0, 12).map((trade) => (
-                <tr key={`${trade.signal_index}-${trade.entry_index ?? 'pending'}-${trade.exit_index ?? 'open'}`}>
-                  <td>{translateDirection(trade.direction)}</td>
-                  <td>{trade.order_type}</td>
-                  <td>{formatCompactNumber(trade.entry_price, 3)}</td>
-                  <td>{formatCompactNumber(trade.stop_loss_price, 3)}</td>
-                  <td>{formatCompactNumber(trade.take_profit_price, 3)}</td>
-                  <td>{translateStatus(trade.status)}</td>
-                  <td>{formatR(trade.r_multiple)}</td>
-                  <td>{trade.bars_held}</td>
-                </tr>
-              ))}
+              {tradeRows.slice(0, 12).map((trade) => {
+                const isLong = trade.direction === '做多' || trade.direction.toLowerCase() === 'long';
+                const isWin = trade.status === 'win';
+                const isLoss = trade.status === 'loss';
+                const rVal = trade.r_multiple ?? 0;
+                return (
+                  <tr key={`${trade.signal_index}-${trade.entry_index ?? 'pending'}-${trade.exit_index ?? 'open'}`}>
+                    <td>
+                      <span className={`direction-badge ${isLong ? 'direction-badge--long' : 'direction-badge--short'}`}>
+                        {isLong ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                        <span>{translateDirection(trade.direction, locale)}</span>
+                      </span>
+                    </td>
+                    <td><span className="order-type-chip">{trade.order_type}</span></td>
+                    <td className="tabular-num">{formatCompactNumber(trade.entry_price, 3)}</td>
+                    <td className="tabular-num text-bad">{formatCompactNumber(trade.stop_loss_price, 3)}</td>
+                    <td className="tabular-num text-good">{formatCompactNumber(trade.take_profit_price, 3)}</td>
+                    <td>
+                      <span className={`trade-status-chip ${isWin ? 'trade-status-chip--win' : isLoss ? 'trade-status-chip--loss' : 'trade-status-chip--open'}`}>
+                        {translateStatus(trade.status, locale)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`r-multiple-pill ${rVal > 0 ? 'r-multiple-pill--pos' : rVal < 0 ? 'r-multiple-pill--neg' : ''}`}>
+                        {formatR(trade.r_multiple)}
+                      </span>
+                    </td>
+                    <td className="tabular-num">{trade.bars_held}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -279,7 +384,7 @@ function RollingBacktestDashboard({ result }: { result: ApiResult<RollingBacktes
 }
 
 export function TerminalWorkbench() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [state, setState] = useState<TerminalState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [timeframes, setTimeframes] = useState<ApiResult<TimeframesResponse> | null>(null);
@@ -437,8 +542,9 @@ export function TerminalWorkbench() {
       setRiskProfileBusy(false);
       return;
     }
-    const label = riskProfileOptions.find((option) => option.value === riskProfile)?.label ?? riskProfile;
-    setMarketMessage(`风险档位已切换为 ${label}`);
+    const opt = riskProfileOptions.find((option) => option.value === riskProfile);
+    const label = locale === 'en' ? (opt?.enLabel ?? riskProfile) : (opt?.label ?? riskProfile);
+    setMarketMessage(locale === 'zh' ? `风险档位已切换为 ${label}` : `Risk profile updated to ${label}`);
     await load();
     setRiskProfileBusy(false);
   }
@@ -476,8 +582,41 @@ export function TerminalWorkbench() {
       : 'Stage 2 output';
   const analysisTone = analysis.running ? 'info' : analysis.error || analysis.status?.ok === false ? 'bad' : analysisStatus?.status === 'succeeded' ? 'good' : 'neutral';
   return (
-    <AppShell title="Terminal">
+    <AppShell title={t.navTerminal}>
       <section className="terminal-grid">
+        {/* Quick Symbol Presets Bar */}
+        <div className="terminal-presets-bar">
+          <div className="terminal-presets-label">
+            <Zap size={13} className="text-accent" />
+            <span>{t.quickPresets}:</span>
+          </div>
+          <div className="terminal-presets-list">
+            {[
+              { label: 'BTC/USDT', source: 'crypto', symbol: 'BTCUSDT', tf: '1d' },
+              { label: 'ETH/USDT', source: 'crypto', symbol: 'ETHUSDT', tf: '1d' },
+              { label: 'SOL/USDT', source: 'crypto', symbol: 'SOLUSDT', tf: '1d' },
+              { label: '000001 平安银行', source: 'eastmoney', symbol: '000001', tf: '1d' },
+              { label: '600519 贵州茅台', source: 'eastmoney', symbol: '600519', tf: '1d' },
+            ].map((preset) => (
+              <button
+                key={preset.symbol}
+                type="button"
+                className={`terminal-preset-chip ${marketForm.symbol === preset.symbol ? 'terminal-preset-chip--active' : ''}`}
+                disabled={controlsDisabled}
+                onClick={() => {
+                  setMarketForm({
+                    source: preset.source,
+                    symbol: preset.symbol,
+                    timeframe: preset.tf,
+                  });
+                }}
+              >
+                <span>{preset.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="control-strip">
           <div className="market-form">
             <label className="market-field">
@@ -524,18 +663,36 @@ export function TerminalWorkbench() {
                 ))}
               </select>
             </label>
-            <label className="market-field">
-              <span>{t.riskProfile}</span>
+            <div className="market-field market-field--risk">
+              <label htmlFor="risk-profile-select">
+                <span>{t.riskProfile}</span>
+              </label>
               <select
+                id="risk-profile-select"
                 value={activeRiskProfile}
                 onChange={(event) => void updateRiskProfile(event.target.value as RiskProfile)}
                 disabled={riskProfileDisabled}
               >
                 {riskProfileOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>
+                    {locale === 'en' ? option.enLabel : option.label}
+                  </option>
                 ))}
               </select>
-            </label>
+              <div className="risk-profile-segmented">
+                {riskProfileOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`risk-pill ${activeRiskProfile === option.value ? 'risk-pill--active' : ''} risk-pill--${option.value}`}
+                    disabled={riskProfileDisabled}
+                    onClick={() => void updateRiskProfile(option.value)}
+                  >
+                    {locale === 'en' ? option.enLabel : option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="market-field">
               <span>{t.signalThreshold}</span>
               <input

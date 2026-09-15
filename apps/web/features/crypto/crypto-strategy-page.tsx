@@ -35,6 +35,14 @@ const INITIAL_ASSETS: CryptoAssetInput[] = [
   { symbol: 'SOL', name: 'Solana', role: '高波动成长卫星仓', momentum: 0.55, volatility: 0.91, fundingPercentile: 92, aboveEma100: true },
 ];
 
+const ASSET_ROLES: Record<string, { zh: string; en: string }> = {
+  BTC: { zh: '市场基准 / 核心仓', en: 'Market Benchmark / Core' },
+  ETH: { zh: '高流动性次核心', en: 'High Liquidity Sub-core' },
+  BNB: { zh: '交易所生态卫星仓', en: 'Exchange Ecosystem Satellite' },
+  XRP: { zh: '事件型卫星仓', en: 'Event-driven Satellite' },
+  SOL: { zh: '高波动成长卫星仓', en: 'High-vol Growth Satellite' },
+};
+
 const REGIMES: Array<{ value: CryptoRegime; zh: string; en: string }> = [
   { value: 'risk_on', zh: '进攻', en: 'Risk-on' },
   { value: 'neutral', zh: '中性', en: 'Neutral' },
@@ -210,29 +218,63 @@ function PerformanceChart({
   strategyLabel,
   benchmarkLabel,
   drawdownLabel,
+  locale,
 }: {
   result: CryptoBacktestResponse;
   strategyLabel: string;
   benchmarkLabel: string;
   drawdownLabel: string;
+  locale: 'zh' | 'en';
 }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const width = 960;
   const equityHeight = 220;
   const drawdownHeight = 70;
-  const strategy = result.curve.map((point) => point.equity);
-  const benchmark = result.curve.map((point) => point.benchmark);
-  const drawdowns = result.curve.map((point) => point.drawdown);
+  const curve = result.curve;
+  const strategy = curve.map((point) => point.equity);
+  const benchmark = curve.map((point) => point.benchmark);
+  const drawdowns = curve.map((point) => point.drawdown);
   const minimum = Math.min(...strategy, ...benchmark);
   const maximum = Math.max(...strategy, ...benchmark);
   const worstDrawdown = Math.min(...drawdowns, -0.01);
 
+  const activePoint = hoverIndex !== null && curve[hoverIndex] ? curve[hoverIndex] : curve[curve.length - 1];
+  const activeX = hoverIndex !== null && curve.length > 1 ? (hoverIndex / (curve.length - 1)) * width : null;
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = ((e.clientX - rect.left) / rect.width) * width;
+    const idx = Math.round((relX / width) * (curve.length - 1));
+    setHoverIndex(Math.max(0, Math.min(curve.length - 1, idx)));
+  };
+
+  const handleMouseLeave = () => {
+    setHoverIndex(null);
+  };
+
   return (
     <div className="crypto-performance-chart">
       <div className="crypto-chart-legend">
-        <span><i className="crypto-chart-key crypto-chart-key--strategy" />{strategyLabel}</span>
-        <span><i className="crypto-chart-key crypto-chart-key--benchmark" />{benchmarkLabel}</span>
+        <div className="legend-items">
+          <span><i className="crypto-chart-key crypto-chart-key--strategy" />{strategyLabel}</span>
+          <span><i className="crypto-chart-key crypto-chart-key--benchmark" />{benchmarkLabel}</span>
+        </div>
+        {activePoint && (
+          <div className="crypto-chart-hover-hud">
+            <span className="hud-date">{activePoint.date}</span>
+            <span className="hud-strat">{locale === 'zh' ? '策略:' : 'Strategy:'} <strong>{activePoint.equity.toFixed(3)}</strong></span>
+            <span className="hud-bench">{locale === 'zh' ? '基准:' : 'Benchmark:'} <strong>{activePoint.benchmark.toFixed(3)}</strong></span>
+            <span className="hud-dd">{locale === 'zh' ? '回撤:' : 'Drawdown:'} <strong className="text-bad">{(activePoint.drawdown * 100).toFixed(1)}%</strong></span>
+          </div>
+        )}
       </div>
-      <svg viewBox={`0 0 ${width} ${equityHeight}`} role="img" aria-label={`${strategyLabel} vs ${benchmarkLabel}`}>
+      <svg
+        viewBox={`0 0 ${width} ${equityHeight}`}
+        role="img"
+        aria-label={`${strategyLabel} vs ${benchmarkLabel}`}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <path className="crypto-chart-grid" d={`M0,${equityHeight / 2}H${width}`} />
         <path
           className="crypto-chart-line crypto-chart-line--benchmark"
@@ -242,13 +284,37 @@ function PerformanceChart({
           className="crypto-chart-line crypto-chart-line--strategy"
           d={linePath(strategy, width, equityHeight, minimum, maximum)}
         />
+        {activeX !== null && (
+          <line
+            x1={activeX}
+            x2={activeX}
+            y1={0}
+            y2={equityHeight}
+            className="chart-crosshair__line"
+          />
+        )}
       </svg>
       <div className="crypto-drawdown-label">{drawdownLabel}</div>
-      <svg viewBox={`0 0 ${width} ${drawdownHeight}`} role="img" aria-label={drawdownLabel}>
+      <svg
+        viewBox={`0 0 ${width} ${drawdownHeight}`}
+        role="img"
+        aria-label={drawdownLabel}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <path
           className="crypto-chart-line crypto-chart-line--drawdown"
           d={linePath(drawdowns, width, drawdownHeight, worstDrawdown, 0)}
         />
+        {activeX !== null && (
+          <line
+            x1={activeX}
+            x2={activeX}
+            y1={0}
+            y2={drawdownHeight}
+            className="chart-crosshair__line"
+          />
+        )}
       </svg>
       <div className="crypto-chart-axis">
         <span>{result.sample.start}</span>
@@ -365,6 +431,43 @@ export function CryptoStrategyPage() {
           <div>
             <span>{copy.selected}</span>
             <strong>{allocation.selectedCount} / 5</strong>
+          </div>
+        </div>
+
+        {/* Dynamic Allocation Stacked Bar */}
+        <div className="crypto-allocation-preview">
+          <div className="crypto-allocation-preview__head">
+            <span>{locale === 'zh' ? '目标组合全景分布 (Target Weights)' : 'Target Weights Breakdown'}</span>
+            <span>{locale === 'zh' ? `入选资产: ${allocation.selectedCount} / 5` : `${allocation.selectedCount} selected`}</span>
+          </div>
+          <div className="crypto-allocation-stacked-bar">
+            {allocation.assets.filter((item) => item.weight > 0).map((item, idx) => {
+              const pct = item.weight * 100;
+              if (pct <= 0) return null;
+              const palette = ['#00e5ff', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+              const color = palette[idx % palette.length];
+              return (
+                <div
+                  key={item.symbol}
+                  className="crypto-allocation-slice"
+                  style={{ width: `${pct}%`, backgroundColor: color }}
+                  title={`${item.symbol}: ${pct.toFixed(1)}%`}
+                >
+                  <span className="slice-name">{item.symbol}</span>
+                  <span className="slice-pct">{pct.toFixed(0)}%</span>
+                </div>
+              );
+            })}
+            {allocation.cashWeight > 0 && (
+              <div
+                className="crypto-allocation-slice crypto-allocation-slice--cash"
+                style={{ width: `${allocation.cashWeight * 100}%` }}
+                title={`CASH: ${(allocation.cashWeight * 100).toFixed(1)}%`}
+              >
+                <span className="slice-name">CASH</span>
+                <span className="slice-pct">{(allocation.cashWeight * 100).toFixed(0)}%</span>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -522,6 +625,7 @@ export function CryptoStrategyPage() {
               strategyLabel={copy.strategy}
               benchmarkLabel={copy.benchmark}
               drawdownLabel={copy.drawdown}
+              locale={locale}
             />
 
             <div className="crypto-validation-grid">
@@ -619,16 +723,28 @@ export function CryptoStrategyPage() {
               <fieldset className="crypto-control-group">
                 <legend>{copy.regime}</legend>
                 <div className="crypto-regime-switch">
-                  {REGIMES.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      aria-pressed={regime === item.value}
-                      onClick={() => setRegime(item.value)}
-                    >
-                      {locale === 'zh' ? item.zh : item.en}
-                    </button>
-                  ))}
+                  {REGIMES.map((item) => {
+                    const iconMap: Record<string, string> = {
+                      risk_on: '🐂',
+                      neutral: '⚖️',
+                      range: '⚡',
+                      risk_off: '🛡️',
+                      crisis: '⚠️',
+                    };
+                    const isSelected = regime === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        aria-pressed={isSelected}
+                        className={`regime-btn ${isSelected ? 'regime-btn--active' : ''} regime-btn--${item.value}`}
+                        onClick={() => setRegime(item.value)}
+                      >
+                        <span className="regime-emoji">{iconMap[item.value]}</span>
+                        <span className="regime-text">{locale === 'zh' ? item.zh : item.en}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </fieldset>
 
@@ -668,16 +784,27 @@ export function CryptoStrategyPage() {
                         </div>
                       </td>
                       <td>
-                        <input
-                          className="crypto-number-input"
-                          aria-label={`${asset.symbol} ${copy.momentum}`}
-                          type="number"
-                          min="-1"
-                          max="1"
-                          step="0.01"
-                          value={asset.momentum}
-                          onChange={(event) => updateAsset(asset.symbol, { momentum: Number(event.target.value) })}
-                        />
+                        <div className="crypto-input-with-gauge">
+                          <input
+                            className="crypto-number-input"
+                            aria-label={`${asset.symbol} ${copy.momentum}`}
+                            type="number"
+                            min="-1"
+                            max="1"
+                            step="0.01"
+                            value={asset.momentum}
+                            onChange={(event) => updateAsset(asset.symbol, { momentum: Number(event.target.value) })}
+                          />
+                          <div className="crypto-momentum-track" title={`Momentum: ${asset.momentum.toFixed(2)}`}>
+                            <div
+                              className={`crypto-momentum-fill ${asset.momentum >= 0 ? 'crypto-momentum-fill--up' : 'crypto-momentum-fill--down'}`}
+                              style={{
+                                width: `${Math.min(Math.abs(asset.momentum) * 50, 50)}%`,
+                                marginLeft: asset.momentum >= 0 ? '50%' : `${50 - Math.min(Math.abs(asset.momentum) * 50, 50)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       </td>
                       <td>
                         <input
@@ -741,7 +868,7 @@ export function CryptoStrategyPage() {
                 <div className="crypto-allocation-row" key={asset.symbol}>
                   <div className="crypto-allocation-row__label">
                     <strong>{asset.symbol}</strong>
-                    <span>{asset.role}</span>
+                    <span>{ASSET_ROLES[asset.symbol]?.[locale] ?? asset.role}</span>
                   </div>
                   <div className="crypto-weight-track" aria-label={`${asset.symbol} ${formatPercent(asset.weight)}`}>
                     <span style={{ width: formatPercent(asset.weight) }} />
